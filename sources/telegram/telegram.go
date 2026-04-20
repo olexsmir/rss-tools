@@ -61,7 +61,7 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 		if len(title) > 64 {
 			title = title[:64] + "..."
 		}
-		feed.AddEntry(app.FeedEntry{
+		feed.Add(app.FeedEntry{
 			Title:   title,
 			ID:      fmt.Sprintf("telegram-%d", m.MessageID),
 			Content: m.Text,

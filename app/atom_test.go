@@ -14,7 +14,7 @@ import (
 
 func TestFeedBuilderAddEntryDefaults(t *testing.T) {
 	feed := NewFeed("test", "feed-id")
-	feed.AddEntry(FeedEntry{Title: "entry", Content: "body"})
+	feed.Add(FeedEntry{Title: "entry", Content: "body"})
 
 	is.Equal(t, 1, len(feed.f.Entries))
 	entry := feed.f.Entries[0]
@@ -24,7 +24,9 @@ func TestFeedBuilderAddEntryDefaults(t *testing.T) {
 
 func TestFeedBuilderBytesAndWriteTo(t *testing.T) {
 	updated := time.Date(2026, 4, 20, 12, 30, 0, 0, time.UTC)
-	feed := NewFeed("test", "feed-id", WithFeedSubtitle("subtitle")).AddText("entry", "content", updated)
+	feed := NewFeed("test", "feed-id").
+		WithSubtitle("subtitle").
+		Add(FeedEntry{Title: "entry", Content: "content", Updated: updated})
 
 	raw, err := feed.Bytes()
 	is.Err(t, err, nil)
@@ -40,7 +42,12 @@ func TestFeedBuilderBytesAndWriteTo(t *testing.T) {
 func TestFeedBuilderRender(t *testing.T) {
 	r := httptest.NewRecorder()
 	err := NewFeed("test", "feed-id").
-		Add("entry", "entry-id", "content", time.Date(2026, 4, 20, 8, 0, 0, 0, time.UTC)).
+		Add(FeedEntry{
+			Title:   "entry",
+			ID:      "entry-id",
+			Content: "content",
+			Updated: time.Date(2026, 4, 20, 8, 0, 0, 0, time.UTC),
+		}).
 		Render(r)
 	is.Err(t, err, nil)
 
@@ -52,7 +59,7 @@ func TestFeedBuilderRender(t *testing.T) {
 
 func TestFeedEntryTextContent(t *testing.T) {
 	feed := NewFeed("test", "feed-id").
-		AddEntry(FeedEntry{
+		Add(FeedEntry{
 			Title:       "text entry",
 			Content:     "plain text content",
 			ContentType: "text",
@@ -77,7 +84,7 @@ func TestFeedEntryTextContent(t *testing.T) {
 func TestFeedEntryHtmlContent(t *testing.T) {
 	htmlContent := "<p>Hello <strong>World</strong></p>"
 	feed := NewFeed("test", "feed-id").
-		AddEntry(FeedEntry{
+		Add(FeedEntry{
 			Title:       "html entry",
 			Content:     htmlContent,
 			ContentType: "html",
@@ -102,19 +109,19 @@ func TestFeedEntryHtmlContent(t *testing.T) {
 func TestFeedMultipleEntriesWithMixedContentTypes(t *testing.T) {
 	updated := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	feed := NewFeed("test", "feed-id").
-		AddEntry(FeedEntry{
+		Add(FeedEntry{
 			Title:       "text entry",
 			Content:     "plain text",
 			ContentType: "text",
 			Updated:     updated,
 		}).
-		AddEntry(FeedEntry{
+		Add(FeedEntry{
 			Title:       "html entry",
 			Content:     "<p>html content</p>",
 			ContentType: "html",
 			Updated:     updated,
 		}).
-		AddEntry(FeedEntry{
+		Add(FeedEntry{
 			Title:   "default entry",
 			Content: "default content",
 			Updated: updated,

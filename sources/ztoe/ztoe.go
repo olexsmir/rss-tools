@@ -56,17 +56,12 @@ func (z *ztoe) handler(scheduleURL string) http.HandlerFunc {
 			fmt.Sprintf("ztoe-%s-%s", group, subgroup))
 
 		for _, interval := range buildOutageIntervals(slots) {
-			feed.Add(
-				fmt.Sprintf("Power outage %s-%s", interval.Start, interval.End),
-				fmt.Sprintf("ztoe-%s-%s-%s-%s-%s",
-					group, subgroup, schedule.Date,
-					strings.ReplaceAll(interval.Start, ":", ""),
-					strings.ReplaceAll(interval.End, ":", ""),
-				),
-				fmt.Sprintf("Date: %s\nGroup: %s.%s\nTime: %s-%s",
-					schedule.Date, group, subgroup, interval.Start, interval.End),
-				intervalTime(schedule.Date, interval.Start),
-			)
+			feed.Add(app.FeedEntry{
+				Title:   fmt.Sprintf("Power outage %s-%s", interval.Start, interval.End),
+				ID:      fmt.Sprintf("ztoe-%s-%s-%s-%s-%s", group, subgroup, schedule.Date, strings.ReplaceAll(interval.Start, ":", ""), strings.ReplaceAll(interval.End, ":", "")),
+				Content: fmt.Sprintf("Date: %s\nGroup: %s.%s\nTime: %s-%s", schedule.Date, group, subgroup, interval.Start, interval.End),
+				Updated: intervalTime(schedule.Date, interval.Start),
+			})
 		}
 		if err := feed.Render(w); err != nil {
 			http.Error(w, "failed to render feed", http.StatusInternalServerError)

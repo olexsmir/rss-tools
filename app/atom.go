@@ -41,57 +41,30 @@ type FeedEntry struct {
 	Updated     time.Time
 }
 
-type FeedOption func(*AtomFeed)
+type FeedBuilder struct{ f AtomFeed }
 
-func WithFeedSubtitle(subtitle string) FeedOption {
-	return func(f *AtomFeed) {
-		f.Subtitle = subtitle
-	}
-}
-
-func WithFeedUpdated(updated time.Time) FeedOption {
-	return func(f *AtomFeed) {
-		if !updated.IsZero() {
-			f.Updated = updated.Format(time.RFC3339)
-		}
-	}
-}
-
-type FeedBuilder struct {
-	feed AtomFeed
-}
-
-func NewFeed(title, id string, opts ...FeedOption) *FeedBuilder {
-	builder := &FeedBuilder{feed: AtomFeed{
+func NewFeed(title, id string) *FeedBuilder {
+	return &FeedBuilder{f: AtomFeed{
 		XMLNS:   "http://www.w3.org/2005/Atom",
 		Title:   title,
 		ID:      id,
 		Updated: time.Now().Format(time.RFC3339),
 	}}
-	for _, opt := range opts {
-		opt(&builder.feed)
+}
+
+func (f *FeedBuilder) WithSubtitle(subtitle string) *FeedBuilder {
+	f.f.Subtitle = subtitle
+	return f
+}
+
+func (f *FeedBuilder) WithUpdated(updated time.Time) *FeedBuilder {
+	if !updated.IsZero() {
+		f.f.Updated = updated.Format(time.RFC3339)
 	}
-	return builder
+	return f
 }
 
-func (f *FeedBuilder) Add(title, id, content string, date time.Time) *FeedBuilder {
-	return f.AddEntry(FeedEntry{
-		Title:   title,
-		ID:      id,
-		Content: content,
-		Updated: date,
-	})
-}
-
-func (f *FeedBuilder) AddText(title, content string, updated time.Time) *FeedBuilder {
-	return f.AddEntry(FeedEntry{
-		Title:   title,
-		Content: content,
-		Updated: updated,
-	})
-}
-
-func (f *FeedBuilder) AddEntry(entry FeedEntry) *FeedBuilder {
+func (f *FeedBuilder) Add(entry FeedEntry) *FeedBuilder {
 	if entry.Updated.IsZero() {
 		entry.Updated = time.Now()
 	}
@@ -100,7 +73,12 @@ func (f *FeedBuilder) AddEntry(entry FeedEntry) *FeedBuilder {
 		entry.ID = fmt.Sprintf("urn:sha1:%x", hash)
 	}
 
-	f.feed.Entries = append(f.feed.Entries, AtomEntry{
+	contentType := entry.ContentType
+	if contentType == "" {
+		contentType = "text"
+	}
+
+	f.f.Entries = append(f.f.Entries, AtomEntry{
 		Title:   entry.Title,
 		ID:      entry.ID,
 		Updated: entry.Updated.Format(time.RFC3339),
@@ -110,16 +88,16 @@ func (f *FeedBuilder) AddEntry(entry FeedEntry) *FeedBuilder {
 		},
 	})
 
-	feedUpdated, err := time.Parse(time.RFC3339, f.feed.Updated)
+	feedUpdated, err := time.Parse(time.RFC3339, f.f.Updated)
 	if err != nil || entry.Updated.After(feedUpdated) {
-		f.feed.Updated = entry.Updated.Format(time.RFC3339)
+		f.f.Updated = entry.Updated.Format(time.RFC3339)
 	}
 	return f
 }
 
 func (f *FeedBuilder) SetUpdated(updated time.Time) *FeedBuilder {
 	if !updated.IsZero() {
-		f.feed.Updated = updated.Format(time.RFC3339)
+		f.f.Updated = updated.Format(time.RFC3339)
 	}
 	return f
 }
@@ -127,7 +105,7 @@ func (f *FeedBuilder) SetUpdated(updated time.Time) *FeedBuilder {
 func (f *FeedBuilder) WriteTo(w io.Writer) error {
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
-	return enc.Encode(f.feed)
+	return enc.Encode(f.f)
 }
 
 func (f *FeedBuilder) Bytes() ([]byte, error) {
