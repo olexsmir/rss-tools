@@ -3,6 +3,7 @@ package app
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,24 @@ func (a *App) loggingMiddleware(next http.Handler) http.Handler {
 			"latency", time.Since(start).String(),
 			"ua", r.UserAgent(),
 		)
+	})
+}
+
+func (a *App) authMiddleware(next http.Handler) http.Handler {
+	if a.Config == nil || strings.TrimSpace(a.Config.AuthToken) == "" {
+		return next
+	}
+
+	expected := strings.TrimSpace(a.Config.AuthToken)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queryToken := strings.TrimSpace(r.URL.Query().Get("token"))
+		headerToken := strings.TrimSpace(r.Header.Get("Authorization"))
+		if queryToken == expected || headerToken == expected {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	})
 }
 

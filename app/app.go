@@ -85,8 +85,8 @@ func (a *App) Start(ctx context.Context) error {
 	}
 
 	// http server
-	// TODO: opt in auth middleware
 	handler := a.recoverMiddleware(a.mux)
+	handler = a.authMiddleware(handler)
 	handler = a.loggingMiddleware(handler)
 	httpSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", a.Config.Port), // fixme
