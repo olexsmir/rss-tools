@@ -56,6 +56,7 @@ type Message struct {
 	From          *User       `json:"from"`
 	Chat          *Chat       `json:"chat"`
 	Text          string      `json:"text"`
+	Caption       string      `json:"caption,omitempty"`
 	Date          int64       `json:"date"`
 	Photo         []PhotoSize `json:"photo,omitempty"`
 	PhotoBase64   string      `json:"photo_base64,omitempty"`

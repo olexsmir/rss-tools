@@ -11,7 +11,7 @@ import (
 func TestFeedEntryFromMessageWithImage(t *testing.T) {
 	msg := &Message{
 		MessageID:     42,
-		Text:          "hello <world>",
+		Caption:       "hello <world>",
 		Date:          time.Date(2026, 4, 22, 19, 38, 0, 0, time.UTC).Unix(),
 		PhotoBase64:   "YWJj",
 		PhotoMIMEType: "image/png",

@@ -86,7 +86,7 @@ func (t *telegram) worker(ctx context.Context) error {
 
 		for _, u := range updates {
 			if u.Message != nil && u.Message.From != nil {
-				slog.InfoContext(ctx, "message from", "user_id", u.Message.From.ID, "username", u.Message.From.Username, "msg", u.Message.Text)
+				slog.InfoContext(ctx, "message from", "user_id", u.Message.From.ID, "username", u.Message.From.Username, "msg", messageText(u.Message))
 			}
 
 			if u.Message == nil || u.Message.From == nil || u.Message.From.ID != t.allowedID {
@@ -153,22 +153,23 @@ func (t *telegram) loadMessages() ([]*Message, error) {
 
 func feedEntryFromMessage(m *Message) app.FeedEntry {
 	updated := time.Unix(m.Date, 0)
+	text := messageText(m)
 	if m.PhotoBase64 == "" {
-		title := m.Text
+		title := text
 		if len(title) > 64 {
 			title = title[:64] + "..."
 		}
 		return app.FeedEntry{
 			Title:   title,
 			ID:      fmt.Sprintf("telegram-%d", m.MessageID),
-			Content: m.Text,
+			Content: text,
 			Updated: updated,
 		}
 	}
 
 	parts := make([]string, 0, 2)
-	if text := strings.TrimSpace(m.Text); text != "" {
-		parts = append(parts, "<p>"+html.EscapeString(text)+"</p>")
+	if t := strings.TrimSpace(text); t != "" {
+		parts = append(parts, "<p>"+html.EscapeString(t)+"</p>")
 	}
 	mimeType := m.PhotoMIMEType
 	if mimeType == "" {
@@ -183,4 +184,14 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 		ContentType: "html",
 		Updated:     updated,
 	}
+}
+
+func messageText(m *Message) string {
+	if m == nil {
+		return ""
+	}
+	if caption := strings.TrimSpace(m.Caption); caption != "" {
+		return m.Caption
+	}
+	return m.Text
 }

@@ -32,7 +32,7 @@ func TestGetUpdatesHydratesPhotoBase64(t *testing.T) {
 					"message": {
 						"message_id": 7,
 						"date": 1713790000,
-						"text": "photo msg",
+						"caption": "photo msg",
 						"photo": [
 							{"file_id": "small", "width": 90, "height": 90, "file_size": 100},
 							{"file_id": "large", "width": 1280, "height": 720, "file_size": 2048}
@@ -58,6 +58,7 @@ func TestGetUpdatesHydratesPhotoBase64(t *testing.T) {
 
 	msg := updates[0].Message
 	is.Equal(t, "large", seenGetFileForID)
+	is.Equal(t, "photo msg", msg.Caption)
 	is.Equal(t, base64.StdEncoding.EncodeToString(pngData), msg.PhotoBase64)
 	is.Equal(t, "image/png", msg.PhotoMIMEType)
 }
