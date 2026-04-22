@@ -6,8 +6,10 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"olexsmir.xyz/rss-tools/app"
@@ -57,16 +59,7 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 
 	feed := app.NewFeed("Telegram feed", "telegram-feed")
 	for _, m := range messages {
-		title := m.Text
-		if len(title) > 64 {
-			title = title[:64] + "..."
-		}
-		feed.Add(app.FeedEntry{
-			Title:   title,
-			ID:      fmt.Sprintf("telegram-%d", m.MessageID),
-			Content: m.Text,
-			Updated: time.Unix(m.Date, 0),
-		})
+		feed.Add(feedEntryFromMessage(m))
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -96,7 +89,7 @@ func (t *telegram) worker(ctx context.Context) error {
 				slog.InfoContext(ctx, "message from", "user_id", u.Message.From.ID, "username", u.Message.From.Username, "msg", u.Message.Text)
 			}
 
-			if u.Message == nil && u.Message.From == nil || u.Message.From.ID != t.allowedID {
+			if u.Message == nil || u.Message.From == nil || u.Message.From.ID != t.allowedID {
 				offset = u.UpdateID + 1
 				continue
 			}
@@ -156,4 +149,38 @@ func (t *telegram) loadMessages() ([]*Message, error) {
 		return nil
 	})
 	return messages, err
+}
+
+func feedEntryFromMessage(m *Message) app.FeedEntry {
+	updated := time.Unix(m.Date, 0)
+	if m.PhotoBase64 == "" {
+		title := m.Text
+		if len(title) > 64 {
+			title = title[:64] + "..."
+		}
+		return app.FeedEntry{
+			Title:   title,
+			ID:      fmt.Sprintf("telegram-%d", m.MessageID),
+			Content: m.Text,
+			Updated: updated,
+		}
+	}
+
+	parts := make([]string, 0, 2)
+	if text := strings.TrimSpace(m.Text); text != "" {
+		parts = append(parts, "<p>"+html.EscapeString(text)+"</p>")
+	}
+	mimeType := m.PhotoMIMEType
+	if mimeType == "" {
+		mimeType = "image/jpeg"
+	}
+	parts = append(parts, fmt.Sprintf(`<p><img src="data:%s;base64,%s" alt="telegram image"/></p>`, mimeType, m.PhotoBase64))
+
+	return app.FeedEntry{
+		Title:       fmt.Sprintf("🖼️ [%s]", updated.Format("2006-01-02")),
+		ID:          fmt.Sprintf("telegram-%d", m.MessageID),
+		Content:     strings.Join(parts, ""),
+		ContentType: "html",
+		Updated:     updated,
+	}
 }
