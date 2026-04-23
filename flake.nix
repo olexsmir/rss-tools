@@ -28,6 +28,18 @@
           options.services.rss-tools = {
             enable = mkEnableOption "rss-tools service";
 
+            user = mkOption {
+              type = types.str;
+              default = "rss-tools";
+              description = "User account under which rss-tools runs.";
+            };
+
+            group = mkOption {
+              type = types.str;
+              default = "rss-tools";
+              description = "Group under which rss-tools runs.";
+            };
+
             package = mkOption {
               type = types.package;
               default = self.packages.${pkgs.stdenv.hostPlatform.system}.rss-tools;
@@ -58,13 +70,20 @@
               }
             ];
 
+            users.groups.${cfg.group} = { };
+            users.users.${cfg.user} = {
+              isSystemUser = true;
+              group = cfg.group;
+            };
+
             systemd.services.rss-tools = {
               description = "rss-tools service";
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
               serviceConfig = {
                 Type = "simple";
-                DynamicUser = true;
+                User = cfg.user;
+                Group = cfg.group;
                 StateDirectory = "rss-tools";
                 WorkingDirectory = "%S/rss-tools";
                 ExecStart = "${cfg.package}/bin/rss-tools --config ${cfg.settingsFile} --db ${cfg.dbPath}";
@@ -74,7 +93,6 @@
                 PrivateTmp = true;
                 ProtectSystem = "strict";
                 ProtectHome = true;
-                ReadWritePaths = [ (builtins.dirOf cfg.dbPath) ];
               };
             };
           };
