@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,8 +87,11 @@ func (a *App) Start(ctx context.Context) error {
 
 	// http server
 	handler := a.recoverMiddleware(a.mux)
-	handler = a.authMiddleware(handler)
 	handler = a.loggingMiddleware(handler)
+	if strings.TrimSpace(a.Config.AuthToken) != "" {
+		handler = a.authMiddleware(handler)
+	}
+
 	httpSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", a.Config.Port), // fixme
 		Handler: handler,

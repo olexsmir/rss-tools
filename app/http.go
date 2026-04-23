@@ -35,10 +35,6 @@ func (a *App) loggingMiddleware(next http.Handler) http.Handler {
 }
 
 func (a *App) authMiddleware(next http.Handler) http.Handler {
-	if a.Config == nil || strings.TrimSpace(a.Config.AuthToken) == "" {
-		return next
-	}
-
 	expected := strings.TrimSpace(a.Config.AuthToken)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		queryToken := strings.TrimSpace(r.URL.Query().Get("token"))
