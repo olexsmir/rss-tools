@@ -62,8 +62,10 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 		feed.Add(feedEntryFromMessage(m))
 	}
 
-	w.WriteHeader(http.StatusOK)
-	feed.Render(w)
+	if err := feed.Render(w); err != nil {
+		http.Error(w, "failed to render feed", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (t *telegram) worker(ctx context.Context) error {
