@@ -24,6 +24,7 @@ type AtomEntry struct {
 	Title   string      `xml:"title"`
 	ID      string      `xml:"id"`
 	Updated string      `xml:"updated"`
+	Links   []AtomLink  `xml:"link,omitempty"`
 	Content AtomContent `xml:"content"`
 }
 
@@ -33,12 +34,25 @@ type AtomContent struct {
 	Value   string   `xml:",chardata"`
 }
 
+type AtomLink struct {
+	Rel  string `xml:"rel,attr,omitempty"`
+	Type string `xml:"type,attr,omitempty"`
+	Href string `xml:"href,attr"`
+}
+
 type FeedEntry struct {
 	Title       string
 	ID          string
+	Links       []FeedLink
 	Content     string
 	ContentType string // "text" or "html", defaults to "text"
 	Updated     time.Time
+}
+
+type FeedLink struct {
+	Rel  string
+	Type string
+	Href string
 }
 
 type FeedBuilder struct{ f AtomFeed }
@@ -78,10 +92,19 @@ func (f *FeedBuilder) Add(entry FeedEntry) *FeedBuilder {
 		contentType = "text"
 	}
 
+	links := make([]AtomLink, 0, len(entry.Links))
+	for _, link := range entry.Links {
+		if link.Href == "" {
+			continue
+		}
+		links = append(links, AtomLink(link))
+	}
+
 	f.f.Entries = append(f.f.Entries, AtomEntry{
 		Title:   entry.Title,
 		ID:      entry.ID,
 		Updated: entry.Updated.Format(time.RFC3339),
+		Links:   links,
 		Content: AtomContent{
 			Type:  contentType,
 			Value: entry.Content,

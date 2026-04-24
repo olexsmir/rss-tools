@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
-	"html"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -156,22 +155,39 @@ func (t *telegram) loadMessages() ([]*Message, error) {
 func feedEntryFromMessage(m *Message) app.FeedEntry {
 	updated := time.Unix(m.Date, 0)
 	text := messageText(m)
+	normalizedLinks := normalizeLinks(messageLinks(text))
+	entryID := fmt.Sprintf("telegram-%d", m.MessageID)
+	if videoID, ok := firstYouTubeVideoID(normalizedLinks); ok {
+		entryID = "yt:video:" + videoID
+	}
+
 	if m.PhotoBase64 == "" {
 		title := text
 		if len(title) > 64 {
 			title = title[:64] + "..."
 		}
+
+		content := text
+		contentType := ""
+		if len(normalizedLinks) > 0 {
+			content, _ = linkifyMessageText(text)
+			contentType = "html"
+		}
+
 		return app.FeedEntry{
-			Title:   title,
-			ID:      fmt.Sprintf("telegram-%d", m.MessageID),
-			Content: text,
-			Updated: updated,
+			Title:       title,
+			ID:          entryID,
+			Links:       feedLinks(normalizedLinks),
+			Content:     content,
+			Updated:     updated,
+			ContentType: contentType,
 		}
 	}
 
 	parts := make([]string, 0, 2)
 	if t := strings.TrimSpace(text); t != "" {
-		parts = append(parts, "<p>"+html.EscapeString(t)+"</p>")
+		linkified, _ := linkifyMessageText(t)
+		parts = append(parts, "<p>"+linkified+"</p>")
 	}
 	mimeType := m.PhotoMIMEType
 	if mimeType == "" {
@@ -181,7 +197,8 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 
 	return app.FeedEntry{
 		Title:       fmt.Sprintf("🖼️ [%s]", updated.Format("2006-01-02")),
-		ID:          fmt.Sprintf("telegram-%d", m.MessageID),
+		ID:          entryID,
+		Links:       feedLinks(normalizedLinks),
 		Content:     strings.Join(parts, ""),
 		ContentType: "html",
 		Updated:     updated,

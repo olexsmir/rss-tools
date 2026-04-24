@@ -40,3 +40,25 @@ func TestFeedEntryFromMessageTextOnly(t *testing.T) {
 	is.Equal(t, "", entry.ContentType)
 	is.Equal(t, "plain text", entry.Content)
 }
+
+func TestFeedEntryFromMessageLinkifiesAndAddsAtomLinks(t *testing.T) {
+	msg := &Message{
+		MessageID: 15,
+		Text:      "watch https://example.com and https://youtu.be/dQw4w9WgXcQ.",
+		Date:      time.Date(2026, 4, 23, 11, 0, 0, 0, time.UTC).Unix(),
+	}
+
+	entry := feedEntryFromMessage(msg)
+	is.Equal(t, "html", entry.ContentType)
+	if !strings.Contains(entry.Content, `<a href="https://example.com">https://example.com</a>`) {
+		t.Fatalf("expected generic link in content: %s", entry.Content)
+	}
+	if !strings.Contains(entry.Content, `<a href="https://youtu.be/dQw4w9WgXcQ">https://youtu.be/dQw4w9WgXcQ</a>`) {
+		t.Fatalf("expected youtube link in content: %s", entry.Content)
+	}
+
+	is.Equal(t, 2, len(entry.Links))
+	is.Equal(t, "https://example.com", entry.Links[0].Href)
+	is.Equal(t, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", entry.Links[1].Href)
+	is.Equal(t, "yt:video:dQw4w9WgXcQ", entry.ID)
+}

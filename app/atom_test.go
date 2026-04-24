@@ -106,6 +106,30 @@ func TestFeedEntryHtmlContent(t *testing.T) {
 	is.Equal(t, htmlContent, entry.Content.Value)
 }
 
+func TestFeedEntryLinks(t *testing.T) {
+	feed := NewFeed("test", "feed-id").
+		Add(FeedEntry{
+			Title:   "entry",
+			Content: "hello",
+			Links: []FeedLink{
+				{Rel: "alternate", Type: "text/html", Href: "https://example.com/item"},
+			},
+			Updated: time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC),
+		})
+
+	raw, err := feed.Bytes()
+	is.Err(t, err, nil)
+	if !strings.Contains(string(raw), `<link rel="alternate" type="text/html" href="https://example.com/item"></link>`) {
+		t.Fatalf("expected link element in serialized feed")
+	}
+
+	var parsed AtomFeed
+	is.Err(t, xml.Unmarshal(raw, &parsed), nil)
+	is.Equal(t, 1, len(parsed.Entries))
+	is.Equal(t, 1, len(parsed.Entries[0].Links))
+	is.Equal(t, "https://example.com/item", parsed.Entries[0].Links[0].Href)
+}
+
 func TestFeedMultipleEntriesWithMixedContentTypes(t *testing.T) {
 	updated := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	feed := NewFeed("test", "feed-id").
