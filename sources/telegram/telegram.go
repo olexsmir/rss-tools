@@ -20,6 +20,7 @@ type telegram struct {
 	client    *http.Client
 	tg        *TelegramSDK
 	allowedID int64
+	logger *slog.Logger
 }
 
 func Register(a *app.App) error {
@@ -39,6 +40,7 @@ func Register(a *app.App) error {
 		client:    a.Client,
 		tg:        NewSDK(a.Client, a.Config.TGToken),
 		allowedID: a.Config.TGUserID,
+		logger: a.Logger,
 	}
 
 	a.AddWorker(t.worker)
@@ -76,7 +78,7 @@ func (t *telegram) worker(ctx context.Context) error {
 	for {
 		updates, err := t.tg.GetUpdates(ctx, offset)
 		if err != nil {
-			slog.ErrorContext(ctx, "getUpdates failed", "err", err)
+			t.logger.ErrorContext(ctx, "getUpdates failed", "err", err)
 			select {
 			case <-ctx.Done():
 				return nil
@@ -87,7 +89,7 @@ func (t *telegram) worker(ctx context.Context) error {
 
 		for _, u := range updates {
 			if u.Message != nil && u.Message.From != nil {
-				slog.InfoContext(ctx, "message from", "user_id", u.Message.From.ID, "username", u.Message.From.Username, "msg", messageText(u.Message))
+				t.logger.InfoContext(ctx, "message from", "user_id", u.Message.From.ID, "username", u.Message.From.Username, "msg", messageText(u.Message))
 			}
 
 			if u.Message == nil || u.Message.From == nil || u.Message.From.ID != t.allowedID {
@@ -96,7 +98,7 @@ func (t *telegram) worker(ctx context.Context) error {
 			}
 
 			if err := t.saveMessage(u.Message); err != nil {
-				slog.ErrorContext(ctx, "failed to save message", "err", err)
+				t.logger.ErrorContext(ctx, "failed to save message", "err", err)
 			}
 
 			if err := t.tg.SetReaction(ctx, u.Message.From.ID, u.Message.MessageID, "👍"); err != nil {

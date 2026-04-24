@@ -1,7 +1,6 @@
 package app
 
 import (
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -24,7 +23,7 @@ func (a *App) loggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		wrapped := wrapResponseWriter(w)
 		next.ServeHTTP(wrapped, r)
-		slog.Info("http request",
+		a.Logger.Info("http request",
 			"method", r.Method,
 			"status", wrapped.status,
 			"path", r.URL.Path,

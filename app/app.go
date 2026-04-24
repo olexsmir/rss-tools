@@ -80,7 +80,7 @@ func (a *App) Start(ctx context.Context) error {
 		go func(w func(context.Context) error) {
 			defer a.wg.Done()
 			if err := w(ctx); err != nil {
-				slog.ErrorContext(ctx, "worker exited with an error", "err", err)
+				a.Logger.ErrorContext(ctx, "worker exited with an error", "err", err)
 			}
 		}(worker)
 	}
@@ -106,7 +106,7 @@ func (a *App) Start(ctx context.Context) error {
 		}()
 	}()
 
-	slog.Info("starting http server", "port", a.Config.Port)
+	a.Logger.Info("starting http server", "port", a.Config.Port)
 	if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
 		return err
 	}
