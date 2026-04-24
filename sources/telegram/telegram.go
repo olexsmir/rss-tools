@@ -18,9 +18,10 @@ type telegram struct {
 	db        *app.Bucket
 	messages  *app.Bucket
 	client    *http.Client
+	get       func(context.Context, string) (*http.Response, error)
 	tg        *TelegramSDK
 	allowedID int64
-	logger *slog.Logger
+	logger    *slog.Logger
 }
 
 func Register(a *app.App) error {
@@ -38,9 +39,10 @@ func Register(a *app.App) error {
 		db:        db,
 		messages:  messages,
 		client:    a.Client,
+		get:       a.Get,
 		tg:        NewSDK(a.Client, a.Config.TGToken),
 		allowedID: a.Config.TGUserID,
-		logger: a.Logger,
+		logger:    a.Logger,
 	}
 
 	a.AddWorker(t.worker)
@@ -52,7 +54,7 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 	// todo: cache feed contruction
 	// todo: dont include messages older than N days
 
-	messages, err := t.loadMessages()
+	messages, err := t.loadMessages(r.Context())
 	if err != nil {
 		http.Error(w, "failed to load messages", http.StatusInternalServerError)
 		return
@@ -60,6 +62,12 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 
 	feed := app.NewFeed("Telegram feed", "telegram-feed")
 	for _, m := range messages {
+		if changed := t.enrichMessageWithLinkTitles(r.Context(), m); changed {
+			if err := t.saveMessage(m); err != nil {
+				http.Error(w, "failed to update cached titles", http.StatusInternalServerError)
+				return
+			}
+		}
 		feed.Add(feedEntryFromMessage(m))
 	}
 
@@ -70,6 +78,8 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *telegram) worker(ctx context.Context) error {
+	t.logger.Info("starting telegram bot")
+
 	offset, err := t.loadOffset()
 	if err != nil {
 		return err
@@ -96,6 +106,8 @@ func (t *telegram) worker(ctx context.Context) error {
 				offset = u.UpdateID + 1
 				continue
 			}
+
+			_ = t.enrichMessageWithLinkTitles(ctx, u.Message)
 
 			if err := t.saveMessage(u.Message); err != nil {
 				t.logger.ErrorContext(ctx, "failed to save message", "err", err)
@@ -141,17 +153,53 @@ func (t *telegram) saveMessage(m *Message) error {
 	return t.messages.Set(key, buf.Bytes())
 }
 
-func (t *telegram) loadMessages() ([]*Message, error) {
+func (t *telegram) loadMessages(ctx context.Context) ([]*Message, error) {
 	var messages []*Message
 	err := t.messages.ForEach(func(k, v []byte) error {
 		var m Message
 		if err := gob.NewDecoder(bytes.NewReader(v)).Decode(&m); err != nil {
-			return err
+			t.logger.WarnContext(ctx, "failed to decode telegram message, skipping", "key", fmt.Sprintf("%x", k), "err", err)
+			return nil
 		}
 		messages = append(messages, &m)
 		return nil
 	})
 	return messages, err
+}
+
+func (t *telegram) enrichMessageWithLinkTitles(ctx context.Context, m *Message) bool {
+	text := messageText(m)
+	if !isSingleLinkMessage(text) {
+		return false
+	}
+
+	links := normalizeLinks(messageLinks(text))
+	if len(links) == 0 {
+		return false
+	}
+	if m.LinkTitles == nil {
+		m.LinkTitles = make(map[string]string, len(links))
+	}
+
+	changed := false
+	for _, link := range links {
+		cachedTitle := normalizePageTitle(m.LinkTitles[link])
+		if isMeaningfulPageTitle(cachedTitle) {
+			continue
+		}
+		if cachedTitle != "" {
+			delete(m.LinkTitles, link)
+			changed = true
+		}
+		title, err := fetchPageTitle(ctx, t.get, link)
+		if err != nil {
+			t.logger.WarnContext(ctx, "failed to lookup page title", "url", link, "err", err)
+			continue
+		}
+		m.LinkTitles[link] = title
+		changed = true
+	}
+	return changed
 }
 
 func feedEntryFromMessage(m *Message) app.FeedEntry {
@@ -165,6 +213,14 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 
 	if m.PhotoBase64 == "" {
 		title := text
+		if isSingleLinkMessage(text) {
+			for _, link := range normalizedLinks {
+				if t := strings.TrimSpace(m.LinkTitles[link]); t != "" {
+					title = t
+					break
+				}
+			}
+		}
 		if len(title) > 64 {
 			title = title[:64] + "..."
 		}
@@ -205,6 +261,19 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 		ContentType: "html",
 		Updated:     updated,
 	}
+}
+
+func isSingleLinkMessage(text string) bool {
+	links := findLinks(text)
+	if len(links) != 1 {
+		return false
+	}
+	link := links[0]
+	if strings.TrimSpace(text[:link.start]) != "" {
+		return false
+	}
+	after := strings.TrimSpace(text[link.end:])
+	return trailingPunctRe.ReplaceAllString(after, "") == ""
 }
 
 func messageText(m *Message) string {

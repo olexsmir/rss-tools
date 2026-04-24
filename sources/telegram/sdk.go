@@ -52,15 +52,16 @@ type Chat struct {
 }
 
 type Message struct {
-	MessageID     int64       `json:"message_id"`
-	From          *User       `json:"from"`
-	Chat          *Chat       `json:"chat"`
-	Text          string      `json:"text"`
-	Caption       string      `json:"caption,omitempty"`
-	Date          int64       `json:"date"`
-	Photo         []PhotoSize `json:"photo,omitempty"`
-	PhotoBase64   string      `json:"photo_base64,omitempty"`
-	PhotoMIMEType string      `json:"photo_mime_type,omitempty"`
+	MessageID     int64             `json:"message_id"`
+	From          *User             `json:"from"`
+	Chat          *Chat             `json:"chat"`
+	Text          string            `json:"text"`
+	Caption       string            `json:"caption,omitempty"`
+	Date          int64             `json:"date"`
+	Photo         []PhotoSize       `json:"photo,omitempty"`
+	PhotoBase64   string            `json:"photo_base64,omitempty"`
+	PhotoMIMEType string            `json:"photo_mime_type,omitempty"`
+	LinkTitles    map[string]string `json:"-"`
 }
 
 type PhotoSize struct {

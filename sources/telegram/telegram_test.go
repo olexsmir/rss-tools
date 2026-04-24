@@ -62,3 +62,17 @@ func TestFeedEntryFromMessageLinkifiesAndAddsAtomLinks(t *testing.T) {
 	is.Equal(t, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", entry.Links[1].Href)
 	is.Equal(t, "yt:video:dQw4w9WgXcQ", entry.ID)
 }
+
+func TestFeedEntryFromMessageUsesStoredLinkTitleForSingleLink(t *testing.T) {
+	msg := &Message{
+		MessageID: 16,
+		Text:      "https://example.com/post",
+		Date:      time.Date(2026, 4, 23, 11, 0, 0, 0, time.UTC).Unix(),
+		LinkTitles: map[string]string{
+			"https://example.com/post": "Example Post Title",
+		},
+	}
+
+	entry := feedEntryFromMessage(msg)
+	is.Equal(t, "Example Post Title", entry.Title)
+}

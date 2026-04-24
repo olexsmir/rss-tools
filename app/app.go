@@ -57,7 +57,7 @@ func (a *App) AddShutdown(fn func(ctx context.Context)) {
 }
 
 const (
-	defaultScraperUserAgent = "rss-tools/1.0)"
+	defaultScraperUserAgent = "rss-tools/1.0" // todo: i wanna be a chrome
 	defaultScraperAccept    = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 )
 
