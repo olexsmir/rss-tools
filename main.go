@@ -6,6 +6,7 @@ import (
 
 	"go.etcd.io/bbolt"
 	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/sources/moviefeed"
 	"olexsmir.xyz/rss-tools/sources/telegram"
 	"olexsmir.xyz/rss-tools/sources/ztoe"
 )
@@ -36,6 +37,7 @@ func run(ctx context.Context, cfgPath, dbPath string) error {
 	app := app.New(cfg, db)
 	_ = ztoe.Register(app)
 	_ = telegram.Register(app)
+	_ = moviefeed.Register(app)
 
 	return app.Start(ctx)
 }

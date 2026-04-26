@@ -26,6 +26,7 @@ const sourceURL = "https://ztoe.com.ua/unhooking-search.php"
 func Register(a *app.App) error {
 	z := ztoe{get: a.Get}
 	a.Route("GET /ztoe/{group}/{subgroup}", z.handler(sourceURL))
+	a.Logger.Info("ztoe source registered")
 	return nil
 }
 

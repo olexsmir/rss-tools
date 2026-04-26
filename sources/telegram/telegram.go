@@ -47,6 +47,7 @@ func Register(a *app.App) error {
 
 	a.AddWorker(t.worker)
 	a.Route("GET /telegram", t.handler)
+	a.Logger.Info("telegram source registered")
 	return nil
 }
 
