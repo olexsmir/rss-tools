@@ -8,6 +8,7 @@ import (
 	"olexsmir.xyz/rss-tools/app"
 	"olexsmir.xyz/rss-tools/sources/moviefeed"
 	"olexsmir.xyz/rss-tools/sources/telegram"
+	"olexsmir.xyz/rss-tools/sources/weather"
 	"olexsmir.xyz/rss-tools/sources/ztoe"
 )
 
@@ -38,6 +39,7 @@ func run(ctx context.Context, cfgPath, dbPath string) error {
 	_ = ztoe.Register(app)
 	_ = telegram.Register(app)
 	_ = moviefeed.Register(app)
+	_ = weather.Register(app)
 
 	return app.Start(ctx)
 }
