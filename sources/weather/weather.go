@@ -65,7 +65,7 @@ func (w *weather) handler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, updated, err := buildMorningBriefing(forecast, air)
+	content, updated, err := buildWeatherBriefing(forecast, air)
 	if err != nil {
 		http.Error(rw, "failed to build weather briefing", http.StatusBadGateway)
 		return
@@ -81,10 +81,10 @@ func (w *weather) handler(rw http.ResponseWriter, r *http.Request) {
 		WithUpdated(updated)
 
 	feed.Add(app.FeedEntry{
-		Title:       "Morning weather briefing",
+		Title:       "Weather briefing",
 		ID:          fmt.Sprintf("%s-%s", feedID, updated.Format("20060102")),
-		Content:     formatBriefingHTML(content),
-		ContentType: "html",
+		Content:     formatBriefingXHTML(content),
+		ContentType: "xhtml",
 		Updated:     updated,
 	})
 
@@ -322,11 +322,77 @@ func firstDisplayNamePart(displayName string) string {
 	return strings.TrimSpace(part)
 }
 
-func formatBriefingHTML(content string) string {
-	return "<pre>" + html.EscapeString(content) + "</pre>"
+func formatBriefingXHTML(content string) string {
+	blocks := strings.Split(content, "\n\n")
+	overview := []string{}
+	timeline := []string{}
+	meta := []string{}
+
+	if len(blocks) > 0 {
+		overview = nonEmptyLines(blocks[0])
+	}
+	if len(blocks) > 1 {
+		timeline = nonEmptyLines(blocks[1])
+	}
+	if len(blocks) > 2 {
+		meta = nonEmptyLines(strings.Join(blocks[2:], "\n\n"))
+	}
+
+	var b strings.Builder
+	b.WriteString("<article>")
+
+	if len(overview) > 0 {
+		b.WriteString("<section><h2>Overview</h2>")
+		b.WriteString("<p>" + html.EscapeString(overview[0]) + "</p>")
+		if len(overview) > 1 {
+			b.WriteString("<ul>")
+			for _, line := range overview[1:] {
+				b.WriteString("<li>" + html.EscapeString(line) + "</li>")
+			}
+			b.WriteString("</ul>")
+		}
+		b.WriteString("</section>")
+	}
+
+	if len(timeline) > 0 {
+		b.WriteString("<section><h2>Timeline</h2><ul>")
+		for _, line := range timeline {
+			timestamp, rest, ok := strings.Cut(strings.TrimSpace(line), "  ")
+			if ok {
+				b.WriteString("<li><strong>" + html.EscapeString(strings.TrimSpace(timestamp)) + "</strong> " + html.EscapeString(strings.TrimSpace(rest)) + "</li>")
+				continue
+			}
+			b.WriteString("<li>" + html.EscapeString(line) + "</li>")
+		}
+		b.WriteString("</ul></section>")
+	}
+
+	if len(meta) > 0 {
+		b.WriteString("<section><h2>Source</h2>")
+		for _, line := range meta {
+			b.WriteString("<p>" + html.EscapeString(line) + "</p>")
+		}
+		b.WriteString("</section>")
+	}
+
+	b.WriteString("</article>")
+	return b.String()
 }
 
-func buildMorningBriefing(forecast forecastResponse, air airQualityResponse) (string, time.Time, error) {
+func nonEmptyLines(block string) []string {
+	lines := strings.Split(block, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func buildWeatherBriefing(forecast forecastResponse, air airQualityResponse) (string, time.Time, error) {
 	loc := time.Local
 	if tz := strings.TrimSpace(forecast.Timezone); tz != "" {
 		zone, err := time.LoadLocation(tz)

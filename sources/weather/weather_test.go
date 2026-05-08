@@ -67,7 +67,7 @@ const geocodeFixture = `{
   }
 }`
 
-func TestWeatherHandlerRendersMorningBriefing(t *testing.T) {
+func TestWeatherHandlerRendersWeatherBriefing(t *testing.T) {
 	forecastSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(forecastFixture))
@@ -105,14 +105,24 @@ func TestWeatherHandlerRendersMorningBriefing(t *testing.T) {
 		t.Fatalf("expected atom feed, got %q", got)
 	}
 
+	raw := rr.Body.String()
 	var feed app.AtomFeed
-	is.Err(t, xml.NewDecoder(rr.Body).Decode(&feed), nil)
+	is.Err(t, xml.NewDecoder(strings.NewReader(raw)).Decode(&feed), nil)
 	is.Equal(t, len(feed.Entries), 1)
 	is.Equal(t, feed.Title, "Weather forecast for Kyiv")
-	is.Equal(t, feed.Entries[0].Content.Type, "html")
-	is.Equal(t, strings.HasPrefix(feed.Entries[0].Content.Value, "<pre>"), true)
+	is.Equal(t, feed.Entries[0].Title, "Weather briefing")
+	is.Equal(t, feed.Entries[0].Content.Type, "xhtml")
 
-	content := feed.Entries[0].Content.Value
+	content := raw
+	if !strings.Contains(content, `<content type="xhtml">`) {
+		t.Fatalf("missing xhtml content wrapper in response:\n%s", content)
+	}
+	if !strings.Contains(content, "<article>") || !strings.Contains(content, "<h2>Overview</h2>") {
+		t.Fatalf("missing overview structure in content:\n%s", content)
+	}
+	if !strings.Contains(content, "<h2>Timeline</h2>") {
+		t.Fatalf("missing timeline structure in content:\n%s", content)
+	}
 	if !strings.Contains(content, "+13° / +22°  |  Cloudy with showers in the afternoon") {
 		t.Fatalf("missing summary line in content:\n%s", content)
 	}
@@ -132,10 +142,10 @@ func TestWeatherHandlerRendersMorningBriefing(t *testing.T) {
 		t.Fatalf("missing air quality line in content:\n%s", content)
 	}
 	for _, line := range []string{
-		"08:00  +14°  ☁ Cloudy",
-		"12:00  +18°  🌥 Partly cloudy",
-		"16:00  +21°  🌧 Rain showers",
-		"20:00  +16°  🌥 Partly cloudy",
+		"<strong>08:00</strong> +14°  ☁ Cloudy",
+		"<strong>12:00</strong> +18°  🌥 Partly cloudy",
+		"<strong>16:00</strong> +21°  🌧 Rain showers",
+		"<strong>20:00</strong> +16°  🌥 Partly cloudy",
 	} {
 		if !strings.Contains(content, line) {
 			t.Fatalf("missing timeline line %q in content:\n%s", line, content)
