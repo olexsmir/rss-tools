@@ -7,17 +7,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
+const (
+	atomNamespace  = "http://www.w3.org/2005/Atom"
+	xhtmlNamespace = "http://www.w3.org/1999/xhtml"
+	defaultAuthor  = "rss-tools"
+)
+
 type AtomFeed struct {
-	XMLName  xml.Name    `xml:"feed"`
-	XMLNS    string      `xml:"xmlns,attr"`
-	Title    string      `xml:"title"`
-	ID       string      `xml:"id"`
-	Updated  string      `xml:"updated"`
-	Subtitle string      `xml:"subtitle,omitempty"`
-	Entries  []AtomEntry `xml:"entry"`
+	XMLName  xml.Name     `xml:"feed"`
+	XMLNS    string       `xml:"xmlns,attr"`
+	Title    string       `xml:"title"`
+	ID       string       `xml:"id"`
+	Updated  string       `xml:"updated"`
+	Authors  []AtomPerson `xml:"author,omitempty"`
+	Subtitle string       `xml:"subtitle,omitempty"`
+	Entries  []AtomEntry  `xml:"entry"`
 }
 
 type AtomEntry struct {
@@ -34,10 +42,74 @@ type AtomContent struct {
 	Value   string   `xml:",chardata"`
 }
 
+func (c AtomContent) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	contentType := c.Type
+	if contentType == "" {
+		contentType = "text"
+	}
+
+	start.Name = xml.Name{Local: "content"}
+	start.Attr = append(start.Attr, xml.Attr{
+		Name:  xml.Name{Local: "type"},
+		Value: contentType,
+	})
+
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+
+	if contentType == "xhtml" {
+		if err := validateXHTMLFragment(c.Value); err != nil {
+			return err
+		}
+
+		if err := e.Encode(xhtmlDiv{
+			XMLNS: xhtmlNamespace,
+			Inner: c.Value,
+		}); err != nil {
+			return err
+		}
+	} else {
+		if err := e.EncodeToken(xml.CharData([]byte(c.Value))); err != nil {
+			return err
+		}
+	}
+
+	if err := e.EncodeToken(start.End()); err != nil {
+		return err
+	}
+	return e.Flush()
+}
+
+type xhtmlDiv struct {
+	XMLName xml.Name `xml:"div"`
+	XMLNS   string   `xml:"xmlns,attr"`
+	Inner   string   `xml:",innerxml"`
+}
+
+func validateXHTMLFragment(fragment string) error {
+	wrapped := fmt.Sprintf(`<div xmlns="%s">%s</div>`, xhtmlNamespace, fragment)
+	dec := xml.NewDecoder(strings.NewReader(wrapped))
+	for {
+		_, err := dec.Token()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("invalid xhtml content: %w", err)
+		}
+	}
+}
+
+type AtomPerson struct {
+	Name string `xml:"name"`
+}
+
 type AtomLink struct {
-	Rel  string `xml:"rel,attr,omitempty"`
-	Type string `xml:"type,attr,omitempty"`
-	Href string `xml:"href,attr"`
+	Rel    string `xml:"rel,attr,omitempty"`
+	Type   string `xml:"type,attr,omitempty"`
+	Length string `xml:"length,attr,omitempty"`
+	Href   string `xml:"href,attr"`
 }
 
 type FeedEntry struct {
@@ -45,29 +117,40 @@ type FeedEntry struct {
 	ID          string
 	Links       []FeedLink
 	Content     string
-	ContentType string // "text" or "html", defaults to "text"
+	ContentType string // "text", "html", or "xhtml"; defaults to "text"
 	Updated     time.Time
 }
 
 type FeedLink struct {
-	Rel  string
-	Type string
-	Href string
+	Rel    string
+	Type   string
+	Length string
+	Href   string
 }
 
 type FeedBuilder struct{ f AtomFeed }
 
 func NewFeed(title, id string) *FeedBuilder {
 	return &FeedBuilder{f: AtomFeed{
-		XMLNS:   "http://www.w3.org/2005/Atom",
+		XMLNS:   atomNamespace,
 		Title:   title,
 		ID:      id,
 		Updated: time.Now().Format(time.RFC3339),
+		Authors: []AtomPerson{{Name: defaultAuthor}},
 	}}
 }
 
 func (f *FeedBuilder) WithSubtitle(subtitle string) *FeedBuilder {
 	f.f.Subtitle = subtitle
+	return f
+}
+
+func (f *FeedBuilder) WithAuthor(name string) *FeedBuilder {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return f
+	}
+	f.f.Authors = []AtomPerson{{Name: name}}
 	return f
 }
 

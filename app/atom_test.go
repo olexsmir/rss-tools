@@ -20,6 +20,8 @@ func TestFeedBuilderAddEntryDefaults(t *testing.T) {
 	entry := feed.f.Entries[0]
 	is.NotEqual(t, "", entry.ID)
 	is.NotEqual(t, "", entry.Updated)
+	is.Equal(t, 1, len(feed.f.Authors))
+	is.Equal(t, "rss-tools", feed.f.Authors[0].Name)
 }
 
 func TestFeedBuilderBytesAndWriteTo(t *testing.T) {
@@ -37,6 +39,16 @@ func TestFeedBuilderBytesAndWriteTo(t *testing.T) {
 	var parsed AtomFeed
 	is.Err(t, xml.Unmarshal(raw, &parsed), nil)
 	is.Equal(t, "test", parsed.Title)
+}
+
+func TestFeedBuilderWithAuthor(t *testing.T) {
+	feed := NewFeed("test", "feed-id").WithAuthor("moviefeed")
+	raw, err := feed.Bytes()
+	is.Err(t, err, nil)
+	var parsed AtomFeed
+	is.Err(t, xml.Unmarshal(raw, &parsed), nil)
+	is.Equal(t, 1, len(parsed.Authors))
+	is.Equal(t, "moviefeed", parsed.Authors[0].Name)
 }
 
 func TestFeedBuilderRender(t *testing.T) {
@@ -106,6 +118,26 @@ func TestFeedEntryHtmlContent(t *testing.T) {
 	is.Equal(t, htmlContent, entry.Content.Value)
 }
 
+func TestFeedEntryXHTMLContent(t *testing.T) {
+	xhtmlContent := `<body><p>Hello <strong>World</strong></p></body>`
+	feed := NewFeed("test", "feed-id").
+		Add(FeedEntry{
+			Title:       "xhtml entry",
+			Content:     xhtmlContent,
+			ContentType: "xhtml",
+			Updated:     time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC),
+		})
+
+	raw, err := feed.Bytes()
+	is.Err(t, err, nil)
+	if !strings.Contains(string(raw), `<content type="xhtml">`) {
+		t.Fatalf("expected XHTML content with type='xhtml' attribute in serialized feed")
+	}
+	if !strings.Contains(string(raw), `<div xmlns="http://www.w3.org/1999/xhtml"><body><p>Hello <strong>World</strong></p></body></div>`) {
+		t.Fatalf("expected XHTML div wrapper for content")
+	}
+}
+
 func TestFeedEntryLinks(t *testing.T) {
 	feed := NewFeed("test", "feed-id").
 		Add(FeedEntry{
@@ -128,6 +160,24 @@ func TestFeedEntryLinks(t *testing.T) {
 	is.Equal(t, 1, len(parsed.Entries))
 	is.Equal(t, 1, len(parsed.Entries[0].Links))
 	is.Equal(t, "https://example.com/item", parsed.Entries[0].Links[0].Href)
+}
+
+func TestFeedEntryLinksWithLength(t *testing.T) {
+	feed := NewFeed("test", "feed-id").
+		Add(FeedEntry{
+			Title:   "entry",
+			Content: "hello",
+			Links: []FeedLink{
+				{Rel: "enclosure", Type: "image/jpeg", Length: "0", Href: "https://example.com/item.jpg"},
+			},
+			Updated: time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC),
+		})
+
+	raw, err := feed.Bytes()
+	is.Err(t, err, nil)
+	if !strings.Contains(string(raw), `rel="enclosure" type="image/jpeg" length="0" href="https://example.com/item.jpg"`) {
+		t.Fatalf("expected enclosure link with length in serialized feed")
+	}
 }
 
 func TestFeedMultipleEntriesWithMixedContentTypes(t *testing.T) {

@@ -3,7 +3,7 @@ package moviefeed
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -75,16 +75,17 @@ func (a *TMDBAPI) FetchEpisodesForShow(showID string) ([]TMDBEpisode, error) {
 		return []TMDBEpisode{}, nil
 	}
 
-	seasonData, err := makeRequest[tmdbSeasonResponse](a, "/tv/%s/season/%d", tmdbID, show.NumberOfSeasons)
-	if err != nil {
-		return nil, err
-	}
-
 	var allEpisodes []TMDBEpisode
-	for _, ep := range seasonData.Episodes {
-		ep.ShowName = show.Name
-		ep.ShowID = tmdbID
-		allEpisodes = append(allEpisodes, ep)
+	season := show.NumberOfSeasons
+	seasonData, err := makeRequest[tmdbSeasonResponse](a, "/tv/%s/season/%d", tmdbID, season)
+	if err != nil {
+		slog.Warn("failed to fetch season", "season", season, "show", tmdbID, "err", err)
+	} else {
+		for _, ep := range seasonData.Episodes {
+			ep.ShowName = show.Name
+			ep.ShowID = tmdbID
+			allEpisodes = append(allEpisodes, ep)
+		}
 	}
 
 	return filterRecentEpisodes(allEpisodes), nil
@@ -106,7 +107,7 @@ func (a *TMDBAPI) getTMDBID(showID string) (string, error) {
 	return showID, nil
 }
 
-func makeRequest[T any](a *TMDBAPI, endpoint string, args ...interface{}) (*T, error) {
+func makeRequest[T any](a *TMDBAPI, endpoint string, args ...any) (*T, error) {
 	u, err := url.Parse(fmt.Sprintf(tmdbBaseURL+endpoint, args...))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
@@ -115,16 +116,16 @@ func makeRequest[T any](a *TMDBAPI, endpoint string, args ...interface{}) (*T, e
 	q.Set("api_key", a.apiKey)
 	u.RawQuery = q.Encode()
 
+	slog.Info("external API request", "endpoint", u.String())
 	resp, err := a.client.Get(u.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch %s: %w", endpoint, err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("TMDB API error: %s (status: %d)", string(body), resp.StatusCode)
-	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("failed to close response body", "err", err)
+		}
+	}()
 
 	var result T
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
