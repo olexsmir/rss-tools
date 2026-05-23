@@ -6,12 +6,14 @@ import (
 )
 
 type Config struct {
-	Port              int      `json:"port"`
-	AuthToken         string   `json:"auth_token"`
-	TGUserID          int64    `json:"tg_userid"`
-	TGToken           string   `json:"tg_token"`
-	MoviefeedAPIKey   string   `json:"moviefeed_api_key"`
-	MoviefeedShows    []string `json:"moviefeed_shows"`
+	Port            int      `json:"port"`
+	AuthToken       string   `json:"auth_token"`
+	TGUserID        int64    `json:"tg_userid"`
+	TGToken         string   `json:"tg_token"`
+	MoviefeedAPIKey string   `json:"moviefeed_api_key"`
+	MoviefeedShows  []string `json:"moviefeed_shows"`
+	MusicArtists    []string `json:"music_artists"`
+	MusicMaxAgeDays int      `json:"music_max_age_days"`
 }
 
 func NewConfig(fpath string) (*Config, error) {
