@@ -59,6 +59,9 @@ func TestGetUpdatesHydratesPhotoBase64(t *testing.T) {
 	msg := updates[0].Message
 	is.Equal(t, "large", seenGetFileForID)
 	is.Equal(t, "photo msg", msg.Caption)
+	is.Equal(t, 1, len(msg.PhotoAttachments))
+	is.Equal(t, base64.StdEncoding.EncodeToString(pngData), msg.PhotoAttachments[0].Base64)
+	is.Equal(t, "image/png", msg.PhotoAttachments[0].MIMEType)
 	is.Equal(t, base64.StdEncoding.EncodeToString(pngData), msg.PhotoBase64)
 	is.Equal(t, "image/png", msg.PhotoMIMEType)
 }

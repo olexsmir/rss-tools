@@ -52,16 +52,23 @@ type Chat struct {
 }
 
 type Message struct {
-	MessageID     int64             `json:"message_id"`
-	From          *User             `json:"from"`
-	Chat          *Chat             `json:"chat"`
-	Text          string            `json:"text"`
-	Caption       string            `json:"caption,omitempty"`
-	Date          int64             `json:"date"`
-	Photo         []PhotoSize       `json:"photo,omitempty"`
-	PhotoBase64   string            `json:"photo_base64,omitempty"`
-	PhotoMIMEType string            `json:"photo_mime_type,omitempty"`
-	LinkTitles    map[string]string `json:"-"`
+	MessageID        int64             `json:"message_id"`
+	From             *User             `json:"from"`
+	Chat             *Chat             `json:"chat"`
+	Text             string            `json:"text"`
+	Caption          string            `json:"caption,omitempty"`
+	Date             int64             `json:"date"`
+	MediaGroupID     string            `json:"media_group_id,omitempty"`
+	Photo            []PhotoSize       `json:"photo,omitempty"`
+	PhotoBase64      string            `json:"photo_base64,omitempty"`
+	PhotoMIMEType    string            `json:"photo_mime_type,omitempty"`
+	PhotoAttachments []PhotoAttachment `json:"photo_attachments,omitempty"`
+	LinkTitles       map[string]string `json:"-"`
+}
+
+type PhotoAttachment struct {
+	Base64   string `json:"base64,omitempty"`
+	MIMEType string `json:"mime_type,omitempty"`
 }
 
 type PhotoSize struct {
@@ -90,8 +97,15 @@ func (t *TelegramSDK) GetUpdates(ctx context.Context, offset int64) ([]Update, e
 		if err != nil {
 			return nil, err
 		}
-		msg.PhotoBase64 = base64.StdEncoding.EncodeToString(data)
-		msg.PhotoMIMEType = mimeType
+		attachment := PhotoAttachment{
+			Base64:   base64.StdEncoding.EncodeToString(data),
+			MIMEType: mimeType,
+		}
+		msg.PhotoAttachments = append(msg.PhotoAttachments, attachment)
+		if msg.PhotoBase64 == "" {
+			msg.PhotoBase64 = attachment.Base64
+			msg.PhotoMIMEType = attachment.MIMEType
+		}
 	}
 	return resp.Result, nil
 }

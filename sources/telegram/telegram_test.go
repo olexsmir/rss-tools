@@ -28,6 +28,26 @@ func TestFeedEntryFromMessageWithImage(t *testing.T) {
 	}
 }
 
+func TestFeedEntryFromMessageWithMultipleImages(t *testing.T) {
+	msg := &Message{
+		MessageID: 55,
+		Caption:   "multi image",
+		Date:      time.Date(2026, 4, 23, 12, 15, 0, 0, time.UTC).Unix(),
+		PhotoAttachments: []PhotoAttachment{
+			{Base64: "YWJj", MIMEType: "image/png"},
+			{Base64: "ZGVm", MIMEType: "image/jpeg"},
+		},
+	}
+
+	entry := feedEntryFromMessage(msg)
+	if !strings.Contains(entry.Content, `src="data:image/png;base64,YWJj"`) {
+		t.Fatalf("expected first image data URI in image entry: %s", entry.Content)
+	}
+	if !strings.Contains(entry.Content, `src="data:image/jpeg;base64,ZGVm"`) {
+		t.Fatalf("expected second image data URI in image entry: %s", entry.Content)
+	}
+}
+
 func TestFeedEntryFromMessageTextOnly(t *testing.T) {
 	msg := &Message{
 		MessageID: 11,
@@ -39,6 +59,20 @@ func TestFeedEntryFromMessageTextOnly(t *testing.T) {
 	is.Equal(t, "plain text", entry.Title)
 	is.Equal(t, "", entry.ContentType)
 	is.Equal(t, "plain text", entry.Content)
+}
+
+func TestFeedEntryFromMessagePreservesNewlines(t *testing.T) {
+	msg := &Message{
+		MessageID: 12,
+		Text:      "line 1\nline 2",
+		Date:      time.Date(2026, 4, 22, 19, 38, 0, 0, time.UTC).Unix(),
+	}
+
+	entry := feedEntryFromMessage(msg)
+	is.Equal(t, "html", entry.ContentType)
+	if !strings.Contains(entry.Content, "line 1<br/>line 2") {
+		t.Fatalf("expected line breaks preserved in content: %s", entry.Content)
+	}
 }
 
 func TestFeedEntryFromMessageLinkifiesAndAddsAtomLinks(t *testing.T) {

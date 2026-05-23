@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -69,6 +70,9 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+
+	for _, m := range groupMessages(messages) {
 		feed.Add(feedEntryFromMessage(m))
 	}
 
@@ -168,6 +172,60 @@ func (t *telegram) loadMessages(ctx context.Context) ([]*Message, error) {
 	return messages, err
 }
 
+func groupMessages(messages []*Message) []*Message {
+	if len(messages) == 0 {
+		return messages
+	}
+
+	groups := make(map[string]*Message)
+	out := make([]*Message, 0, len(messages))
+	for _, m := range messages {
+		if m == nil || strings.TrimSpace(m.MediaGroupID) == "" {
+			out = append(out, m)
+			continue
+		}
+
+		group, ok := groups[m.MediaGroupID]
+		if !ok {
+			group = &Message{
+				MessageID:    m.MessageID,
+				From:         m.From,
+				Chat:         m.Chat,
+				Text:         m.Text,
+				Caption:      m.Caption,
+				Date:         m.Date,
+				MediaGroupID: m.MediaGroupID,
+				LinkTitles:   m.LinkTitles,
+			}
+			groups[m.MediaGroupID] = group
+			out = append(out, group)
+		}
+
+		if m.MessageID != 0 && (group.MessageID == 0 || m.MessageID < group.MessageID) {
+			group.MessageID = m.MessageID
+		}
+		if m.Date != 0 && (group.Date == 0 || m.Date < group.Date) {
+			group.Date = m.Date
+		}
+		if strings.TrimSpace(messageText(group)) == "" && strings.TrimSpace(messageText(m)) != "" {
+			group.Caption = m.Caption
+			group.Text = m.Text
+			if len(m.LinkTitles) > 0 {
+				group.LinkTitles = m.LinkTitles
+			}
+		} else if len(group.LinkTitles) == 0 && len(m.LinkTitles) > 0 {
+			group.LinkTitles = m.LinkTitles
+		}
+
+		group.PhotoAttachments = append(group.PhotoAttachments, messagePhotos(m)...)
+		if group.PhotoBase64 == "" && m.PhotoBase64 != "" {
+			group.PhotoBase64 = m.PhotoBase64
+			group.PhotoMIMEType = m.PhotoMIMEType
+		}
+	}
+	return out
+}
+
 func (t *telegram) enrichMessageWithLinkTitles(ctx context.Context, m *Message) bool {
 	text := messageText(m)
 	if !isSingleLinkMessage(text) {
@@ -205,14 +263,15 @@ func (t *telegram) enrichMessageWithLinkTitles(ctx context.Context, m *Message) 
 
 func feedEntryFromMessage(m *Message) app.FeedEntry {
 	updated := time.Unix(m.Date, 0)
-	text := messageText(m)
+	text := normalizeMessageText(messageText(m))
 	normalizedLinks := normalizeLinks(messageLinks(text))
 	entryID := fmt.Sprintf("telegram-%d", m.MessageID)
 	if videoID, ok := firstYouTubeVideoID(normalizedLinks); ok {
 		entryID = "yt:video:" + videoID
 	}
 
-	if m.PhotoBase64 == "" {
+	photos := messagePhotos(m)
+	if len(photos) == 0 {
 		title := text
 		if isSingleLinkMessage(text) {
 			for _, link := range normalizedLinks {
@@ -230,6 +289,10 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 		contentType := ""
 		if len(normalizedLinks) > 0 {
 			content, _ = linkifyMessageText(text)
+			content = preserveLineBreaks(content)
+			contentType = "html"
+		} else if strings.Contains(text, "\n") {
+			content = preserveLineBreaks(html.EscapeString(text))
 			contentType = "html"
 		}
 
@@ -243,16 +306,22 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 		}
 	}
 
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 1+len(photos))
 	if t := strings.TrimSpace(text); t != "" {
-		linkified, _ := linkifyMessageText(t)
+		linkified, _ := linkifyMessageText(text)
+		linkified = preserveLineBreaks(linkified)
 		parts = append(parts, "<p>"+linkified+"</p>")
 	}
-	mimeType := m.PhotoMIMEType
-	if mimeType == "" {
-		mimeType = "image/jpeg"
+	for _, photo := range photos {
+		if photo.Base64 == "" {
+			continue
+		}
+		mimeType := photo.MIMEType
+		if mimeType == "" {
+			mimeType = "image/jpeg"
+		}
+		parts = append(parts, fmt.Sprintf(`<p><img src="data:%s;base64,%s" alt="telegram image"/></p>`, mimeType, photo.Base64))
 	}
-	parts = append(parts, fmt.Sprintf(`<p><img src="data:%s;base64,%s" alt="telegram image"/></p>`, mimeType, m.PhotoBase64))
 
 	return app.FeedEntry{
 		Title:       fmt.Sprintf("🖼️ [%s]", updated.Format("2006-01-02")),
@@ -285,4 +354,35 @@ func messageText(m *Message) string {
 		return m.Caption
 	}
 	return m.Text
+}
+
+func normalizeMessageText(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.ReplaceAll(text, "\r", "\n")
+}
+
+func preserveLineBreaks(text string) string {
+	if !strings.Contains(text, "\n") {
+		return text
+	}
+	return strings.ReplaceAll(text, "\n", "<br/>")
+}
+
+func messagePhotos(m *Message) []PhotoAttachment {
+	if m == nil {
+		return nil
+	}
+	if len(m.PhotoAttachments) > 0 {
+		out := make([]PhotoAttachment, len(m.PhotoAttachments))
+		copy(out, m.PhotoAttachments)
+		return out
+	}
+	if m.PhotoBase64 == "" {
+		return nil
+	}
+	mimeType := m.PhotoMIMEType
+	if mimeType == "" {
+		mimeType = "image/jpeg"
+	}
+	return []PhotoAttachment{{Base64: m.PhotoBase64, MIMEType: mimeType}}
 }
