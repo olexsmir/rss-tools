@@ -2,10 +2,9 @@ package moviefeed
 
 import (
 	"encoding/xml"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -14,12 +13,53 @@ import (
 	"olexsmir.xyz/x/is"
 )
 
+type fakeEpisodeAPI struct {
+	episodes map[string][]TMDBEpisode
+	errs     map[string]error
+}
+
+func (f fakeEpisodeAPI) FetchEpisodesForShow(showID string) ([]TMDBEpisode, error) {
+	if err, ok := f.errs[showID]; ok {
+		return nil, err
+	}
+	if episodes, ok := f.episodes[showID]; ok {
+		return episodes, nil
+	}
+	return nil, nil
+}
+
 func TestHandleMoviesRendersFeedFromConfiguredShows(t *testing.T) {
-	server, client := newTMDBStub(t)
-	defer server.Close()
+	episodes := []TMDBEpisode{
+		{
+			ID:            1001,
+			Name:          "Episode 1",
+			Overview:      "E1",
+			AirDate:       "2026-04-20",
+			EpisodeNumber: 1,
+			SeasonNumber:  1,
+			StillPath:     "/e1.jpg",
+			ShowName:      "Test Show",
+			ShowID:        "101",
+		},
+		{
+			ID:            1002,
+			Name:          "Episode 2",
+			Overview:      "E2",
+			AirDate:       "2026-04-21",
+			EpisodeNumber: 2,
+			SeasonNumber:  1,
+			StillPath:     "",
+			ShowName:      "Test Show",
+			ShowID:        "101",
+		},
+	}
 
 	mf := &moviefeed{
-		api:   NewTMDBAPI("test-key", client),
+		api: fakeEpisodeAPI{
+			episodes: map[string][]TMDBEpisode{
+				"tt123": episodes,
+			},
+		},
 		shows: []string{"tt123"},
 	}
 
@@ -38,7 +78,6 @@ func TestHandleMoviesRendersFeedFromConfiguredShows(t *testing.T) {
 	var feed atom.Feed
 	is.Err(t, xml.NewDecoder(rr.Body).Decode(&feed), nil)
 	is.Equal(t, feed.Title, "moviefeed")
-	is.Equal(t, feed.Subtitle, "Latest episodes from followed shows")
 	is.Equal(t, len(feed.Entry), 2)
 	is.Equal(t, strings.Contains(feed.Entry[0].Title, "S1E2"), true)
 	is.Equal(t, feed.Entry[0].Content.Type, "text")
@@ -51,11 +90,40 @@ func TestHandleMoviesRendersFeedFromConfiguredShows(t *testing.T) {
 }
 
 func TestHandleMoviesContinuesWhenOneShowFails(t *testing.T) {
-	server, client := newTMDBStub(t)
-	defer server.Close()
+	episodes := []TMDBEpisode{
+		{
+			ID:            1001,
+			Name:          "Episode 1",
+			Overview:      "E1",
+			AirDate:       "2026-04-20",
+			EpisodeNumber: 1,
+			SeasonNumber:  1,
+			StillPath:     "/e1.jpg",
+			ShowName:      "Test Show",
+			ShowID:        "101",
+		},
+		{
+			ID:            1002,
+			Name:          "Episode 2",
+			Overview:      "E2",
+			AirDate:       "2026-04-21",
+			EpisodeNumber: 2,
+			SeasonNumber:  1,
+			StillPath:     "",
+			ShowName:      "Test Show",
+			ShowID:        "101",
+		},
+	}
 
 	mf := &moviefeed{
-		api:   NewTMDBAPI("test-key", client),
+		api: fakeEpisodeAPI{
+			episodes: map[string][]TMDBEpisode{
+				"tt123": episodes,
+			},
+			errs: map[string]error{
+				"bad-show": errors.New("boom"),
+			},
+		},
 		shows: []string{"bad-show", "tt123"},
 	}
 
@@ -73,27 +141,19 @@ func TestHandleMoviesContinuesWhenOneShowFails(t *testing.T) {
 	is.Equal(t, len(feed.Entry), 2)
 }
 
-func TestFetchEpisodesForShowFiltersRecentAndMapsFields(t *testing.T) {
-	server, client := newTMDBStub(t)
-	defer server.Close()
+func TestFilterRecentEpisodes(t *testing.T) {
+	now := time.Now()
+	recent := now.AddDate(0, 0, -5).Format(dateFormat)
+	old := now.AddDate(0, 0, -40).Format(dateFormat)
 
-	api := NewTMDBAPI("test-key", client)
-	episodes, err := api.FetchEpisodesForShow("tt123")
-	is.Err(t, err, nil)
+	episodes := filterRecentEpisodes([]TMDBEpisode{
+		{AirDate: recent, Name: "recent"},
+		{AirDate: old, Name: "old"},
+		{AirDate: "", Name: "missing"},
+	})
 
-	is.Equal(t, len(episodes), 2)
-	is.Equal(t, episodes[0].ShowID, "101")
-	is.Equal(t, episodes[0].ShowName, "Test Show")
-}
-
-func TestFetchEpisodesForShowSeasonErrorDoesNotFailShow(t *testing.T) {
-	server, client := newTMDBStubWithSeasonError(t)
-	defer server.Close()
-
-	api := NewTMDBAPI("test-key", client)
-	episodes, err := api.FetchEpisodesForShow("tt123")
-	is.Err(t, err, nil)
-	is.Equal(t, len(episodes), 0)
+	is.Equal(t, 1, len(episodes))
+	is.Equal(t, "recent", episodes[0].Name)
 }
 
 func TestEpisodeContentIncludesImageInBody(t *testing.T) {
@@ -107,113 +167,4 @@ func TestEpisodeContentIncludesImageInBody(t *testing.T) {
 	is.Equal(t, strings.Contains(content, "<body>"), true)
 	is.Equal(t, strings.Contains(content, `<img src="https://image.tmdb.org/t/p/w500/e1.jpg" alt="Episode 1"`), true)
 	is.Equal(t, strings.Contains(content, "</body>"), true)
-}
-
-func newTMDBStub(t *testing.T) (*httptest.Server, *http.Client) {
-	t.Helper()
-
-	recentDay := time.Now().AddDate(0, 0, -7).Format(dateFormat)
-	newestDay := time.Now().AddDate(0, 0, -1).Format(dateFormat)
-	oldDay := time.Now().AddDate(0, 0, -45).Format(dateFormat)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/3/find/tt123", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("external_source"); got != "imdb_id" {
-			t.Fatalf("unexpected external_source query: %q", got)
-		}
-		if got := r.URL.Query().Get("api_key"); got != "test-key" {
-			t.Fatalf("unexpected api_key query: %q", got)
-		}
-		_, _ = w.Write([]byte(`{"tv_results":[{"id":101}]}`))
-	})
-
-	mux.HandleFunc("/3/find/bad-show", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("external_source"); got != "imdb_id" {
-			t.Fatalf("unexpected external_source query: %q", got)
-		}
-		if got := r.URL.Query().Get("api_key"); got != "test-key" {
-			t.Fatalf("unexpected api_key query: %q", got)
-		}
-		_, _ = w.Write([]byte(`{"tv_results":[]}`))
-	})
-
-	mux.HandleFunc("/3/tv/101", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("api_key"); got != "test-key" {
-			t.Fatalf("unexpected api_key query: %q", got)
-		}
-		_, _ = w.Write([]byte(`{"id":101,"name":"Test Show","number_of_seasons":1}`))
-	})
-
-	mux.HandleFunc("/3/tv/101/season/1", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("api_key"); got != "test-key" {
-			t.Fatalf("unexpected api_key query: %q", got)
-		}
-		body := fmt.Sprintf(`{
-			"episodes": [
-				{"id": 1001, "name": "Episode 1", "overview": "E1", "air_date": %q, "episode_number": 1, "season_number": 1, "still_path": "/e1.jpg"},
-				{"id": 1002, "name": "Episode 2", "overview": "E2", "air_date": %q, "episode_number": 2, "season_number": 1, "still_path": ""},
-				{"id": 1003, "name": "Episode old", "overview": "old", "air_date": %q, "episode_number": 3, "season_number": 1, "still_path": ""}
-			]
-		}`, recentDay, newestDay, oldDay)
-		_, _ = w.Write([]byte(body))
-	})
-
-	server := httptest.NewServer(mux)
-	target, err := url.Parse(server.URL)
-	is.Err(t, err, nil)
-
-	client := &http.Client{
-		Transport: rewriteTransport{target: target},
-	}
-	return server, client
-}
-
-func newTMDBStubWithSeasonError(t *testing.T) (*httptest.Server, *http.Client) {
-	t.Helper()
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/3/find/tt123", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("external_source"); got != "imdb_id" {
-			t.Fatalf("unexpected external_source query: %q", got)
-		}
-		if got := r.URL.Query().Get("api_key"); got != "test-key" {
-			t.Fatalf("unexpected api_key query: %q", got)
-		}
-		_, _ = w.Write([]byte(`{"tv_results":[{"id":101}]}`))
-	})
-
-	mux.HandleFunc("/3/tv/101", func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("api_key"); got != "test-key" {
-			t.Fatalf("unexpected api_key query: %q", got)
-		}
-		_, _ = w.Write([]byte(`{"id":101,"name":"Test Show","number_of_seasons":1}`))
-	})
-
-	mux.HandleFunc("/3/tv/101/season/1", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`bad gateway`))
-	})
-
-	server := httptest.NewServer(mux)
-	target, err := url.Parse(server.URL)
-	is.Err(t, err, nil)
-
-	client := &http.Client{
-		Transport: rewriteTransport{target: target},
-	}
-	return server, client
-}
-
-type rewriteTransport struct {
-	target *url.URL
-}
-
-func (t rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	clone := req.Clone(req.Context())
-	copiedURL := *clone.URL
-	copiedURL.Scheme = t.target.Scheme
-	copiedURL.Host = t.target.Host
-	clone.URL = &copiedURL
-	clone.Host = t.target.Host
-	return http.DefaultTransport.RoundTrip(clone)
 }

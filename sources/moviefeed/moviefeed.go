@@ -13,8 +13,12 @@ import (
 )
 
 type moviefeed struct {
-	api   *TMDBAPI
+	api   episodeFetcher
 	shows []string
+}
+
+type episodeFetcher interface {
+	FetchEpisodesForShow(showID string) ([]TMDBEpisode, error)
 }
 
 func Register(a *app.App) error {
@@ -63,7 +67,6 @@ func (mf *moviefeed) fetchNewEpisodes() ([]TMDBEpisode, error) {
 
 func generateFeed(episodes []TMDBEpisode) *atom.Feed {
 	feed := atom.NewFeed("moviefeed", "moviefeed")
-
 	for i := len(episodes) - 1; i >= 0; i-- {
 		ep := episodes[i]
 		airDate, _ := time.Parse(dateFormat, ep.AirDate)
