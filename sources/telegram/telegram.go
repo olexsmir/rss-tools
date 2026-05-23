@@ -26,6 +26,11 @@ type telegram struct {
 	logger    *slog.Logger
 }
 
+const (
+	telegramMessageMaxAge = 48 * time.Hour
+	telegramPurgeInterval = time.Hour
+)
+
 func Register(a *app.App) error {
 	db, err := a.Bucket("telegram")
 	if err != nil {
@@ -48,6 +53,7 @@ func Register(a *app.App) error {
 	}
 
 	a.AddWorker(t.worker)
+	a.AddWorker(t.purgeWorker)
 	a.Route("GET /telegram", t.handler)
 	a.Logger.Info("telegram source registered")
 	return nil
@@ -55,13 +61,13 @@ func Register(a *app.App) error {
 
 func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 	// todo: cache feed contruction
-	// todo: dont include messages older than N days
 
 	messages, err := t.loadMessages(r.Context())
 	if err != nil {
 		http.Error(w, "failed to load messages", http.StatusInternalServerError)
 		return
 	}
+	messages = filterRecentMessages(messages, time.Now().Add(-telegramMessageMaxAge))
 
 	feed := atom.NewFeed("Telegram feed", "telegram-feed")
 	for _, m := range messages {
@@ -138,6 +144,28 @@ func (t *telegram) worker(ctx context.Context) error {
 	}
 }
 
+func (t *telegram) purgeWorker(ctx context.Context) error {
+	t.logger.Info("starting telegram cache purge")
+	ticker := time.NewTicker(telegramPurgeInterval)
+	defer ticker.Stop()
+
+	for {
+		cutoff := time.Now().Add(-telegramMessageMaxAge)
+		purged, err := t.purgeOldMessages(ctx, cutoff)
+		if err != nil {
+			t.logger.ErrorContext(ctx, "failed to purge old telegram messages", "err", err)
+		} else if purged > 0 {
+			t.logger.InfoContext(ctx, "purged old telegram messages", "count", purged)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
 func (t *telegram) saveOffset(offset int64) error {
 	return t.db.Set([]byte("offset"), binary.BigEndian.AppendUint64(nil, uint64(offset)))
 }
@@ -171,6 +199,54 @@ func (t *telegram) loadMessages(ctx context.Context) ([]*Message, error) {
 		return nil
 	})
 	return messages, err
+}
+
+func (t *telegram) purgeOldMessages(ctx context.Context, cutoff time.Time) (int, error) {
+	var keys [][]byte
+	err := t.messages.ForEach(func(k, v []byte) error {
+		var m Message
+		if err := gob.NewDecoder(bytes.NewReader(v)).Decode(&m); err != nil {
+			t.logger.WarnContext(ctx, "failed to decode telegram message for purge, skipping", "key", fmt.Sprintf("%x", k), "err", err)
+			return nil
+		}
+		if isMessageExpired(&m, cutoff) {
+			keyCopy := append([]byte(nil), k...)
+			keys = append(keys, keyCopy)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	purged := 0
+	for _, key := range keys {
+		if err := t.messages.Delete(key); err != nil {
+			return purged, err
+		}
+		purged++
+	}
+	return purged, nil
+}
+
+func filterRecentMessages(messages []*Message, cutoff time.Time) []*Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	out := make([]*Message, 0, len(messages))
+	for _, m := range messages {
+		if !isMessageExpired(m, cutoff) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func isMessageExpired(m *Message, cutoff time.Time) bool {
+	if m == nil || m.Date == 0 {
+		return true
+	}
+	return time.Unix(m.Date, 0).Before(cutoff)
 }
 
 func groupMessages(messages []*Message) []*Message {

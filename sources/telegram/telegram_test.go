@@ -125,3 +125,16 @@ func TestFeedEntryFromMessageUsesStoredLinkTitleForSingleLink(t *testing.T) {
 	entry := feedEntryFromMessage(msg)
 	is.Equal(t, "Example Post Title", entry.Title)
 }
+
+func TestFilterRecentMessages(t *testing.T) {
+	cutoff := time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+	messages := []*Message{
+		{MessageID: 1, Date: cutoff.Add(-time.Second).Unix()},
+		{MessageID: 2, Date: cutoff.Unix()},
+		nil,
+	}
+
+	filtered := filterRecentMessages(messages, cutoff)
+	is.Equal(t, 1, len(filtered))
+	is.Equal(t, int64(2), filtered[0].MessageID)
+}
