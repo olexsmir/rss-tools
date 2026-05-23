@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 )
 
 type telegram struct {
@@ -62,7 +63,7 @@ func (t *telegram) handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feed := app.NewFeed("Telegram feed", "telegram-feed")
+	feed := atom.NewFeed("Telegram feed", "telegram-feed")
 	for _, m := range messages {
 		if changed := t.enrichMessageWithLinkTitles(r.Context(), m); changed {
 			if err := t.saveMessage(m); err != nil {
@@ -261,7 +262,7 @@ func (t *telegram) enrichMessageWithLinkTitles(ctx context.Context, m *Message) 
 	return changed
 }
 
-func feedEntryFromMessage(m *Message) app.FeedEntry {
+func feedEntryFromMessage(m *Message) *atom.Entry {
 	updated := time.Unix(m.Date, 0)
 	text := normalizeMessageText(messageText(m))
 	normalizedLinks := normalizeLinks(messageLinks(text))
@@ -296,13 +297,12 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 			contentType = "html"
 		}
 
-		return app.FeedEntry{
-			Title:       title,
-			ID:          entryID,
-			Links:       feedLinks(normalizedLinks),
-			Content:     content,
-			Updated:     updated,
-			ContentType: contentType,
+		return &atom.Entry{
+			Title:   title,
+			ID:      entryID,
+			Link:    feedLinks(normalizedLinks),
+			Content: atom.NewText(content, contentType),
+			Updated: atom.Time(updated),
 		}
 	}
 
@@ -323,13 +323,12 @@ func feedEntryFromMessage(m *Message) app.FeedEntry {
 		parts = append(parts, fmt.Sprintf(`<p><img src="data:%s;base64,%s" alt="telegram image"/></p>`, mimeType, photo.Base64))
 	}
 
-	return app.FeedEntry{
-		Title:       fmt.Sprintf("🖼️ [%s]", updated.Format("2006-01-02")),
-		ID:          entryID,
-		Links:       feedLinks(normalizedLinks),
-		Content:     strings.Join(parts, ""),
-		ContentType: "html",
-		Updated:     updated,
+	return &atom.Entry{
+		Title:   fmt.Sprintf("🖼️ [%s]", updated.Format("2006-01-02")),
+		ID:      entryID,
+		Link:    feedLinks(normalizedLinks),
+		Content: atom.NewText(strings.Join(parts, ""), "html"),
+		Updated: atom.Time(updated),
 	}
 }
 

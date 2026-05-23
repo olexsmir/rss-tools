@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 )
 
 var (
@@ -90,10 +90,10 @@ func messageLinks(text string) []string {
 	return out
 }
 
-func feedLinks(urls []string) []app.FeedLink {
-	links := make([]app.FeedLink, 0, len(urls))
+func feedLinks(urls []string) []atom.Link {
+	links := make([]atom.Link, 0, len(urls))
 	for _, u := range urls {
-		links = append(links, app.FeedLink{
+		links = append(links, atom.Link{
 			Rel:  "alternate",
 			Type: "text/html",
 			Href: u,

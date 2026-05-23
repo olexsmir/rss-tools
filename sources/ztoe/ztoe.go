@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/html/charset"
 
 	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 )
 
 type ztoe struct {
@@ -52,16 +53,16 @@ func (z *ztoe) handler(scheduleURL string) http.HandlerFunc {
 			slots = append(slots, slot{Range: t, Outage: i < len(row) && row[i]})
 		}
 
-		feed := app.NewFeed(
+		feed := atom.NewFeed(
 			fmt.Sprintf("ZTOE power outages for %s.%s", group, subgroup),
 			fmt.Sprintf("ztoe-%s-%s", group, subgroup))
 
 		for _, interval := range buildOutageIntervals(slots) {
-			feed.Add(app.FeedEntry{
+			feed.Add(&atom.Entry{
 				Title:   fmt.Sprintf("Power outage %s-%s", interval.Start, interval.End),
 				ID:      fmt.Sprintf("ztoe-%s-%s-%s-%s-%s", group, subgroup, schedule.Date, strings.ReplaceAll(interval.Start, ":", ""), strings.ReplaceAll(interval.End, ":", "")),
-				Content: fmt.Sprintf("Date: %s\nGroup: %s.%s\nTime: %s-%s", schedule.Date, group, subgroup, interval.Start, interval.End),
-				Updated: intervalTime(schedule.Date, interval.Start),
+				Content: atom.NewText(fmt.Sprintf("Date: %s\nGroup: %s.%s\nTime: %s-%s", schedule.Date, group, subgroup, interval.Start, interval.End), ""),
+				Updated: atom.Time(intervalTime(schedule.Date, interval.Start)),
 			})
 		}
 		if err := feed.Render(w); err != nil {

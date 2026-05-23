@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 	"olexsmir.xyz/x/is"
 )
 
@@ -106,12 +106,15 @@ func TestWeatherHandlerRendersWeatherBriefing(t *testing.T) {
 	}
 
 	raw := rr.Body.String()
-	var feed app.AtomFeed
+	var feed atom.Feed
 	is.Err(t, xml.NewDecoder(strings.NewReader(raw)).Decode(&feed), nil)
-	is.Equal(t, len(feed.Entries), 1)
+	is.Equal(t, len(feed.Entry), 1)
 	is.Equal(t, feed.Title, "Weather forecast for Kyiv")
-	is.Equal(t, feed.Entries[0].Title, "Weather briefing")
-	is.Equal(t, feed.Entries[0].Content.Type, "xhtml")
+	is.Equal(t, feed.Entry[0].Title, "Weather briefing")
+	if feed.Entry[0].Content == nil {
+		t.Fatalf("expected xhtml content")
+	}
+	is.Equal(t, feed.Entry[0].Content.Type, "xhtml")
 
 	content := raw
 	if !strings.Contains(content, `<content type="xhtml">`) {

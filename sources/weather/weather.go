@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 )
 
 const (
@@ -77,15 +78,14 @@ func (w *weather) handler(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	feedID := weatherFeedID(lat, lon)
-	feed := app.NewFeed(fmt.Sprintf("Weather forecast for %s", place), feedID).
+	feed := atom.NewFeed(fmt.Sprintf("Weather forecast for %s", place), feedID).
 		WithUpdated(updated)
 
-	feed.Add(app.FeedEntry{
-		Title:       "Weather briefing",
-		ID:          fmt.Sprintf("%s-%s", feedID, updated.Format("20060102")),
-		Content:     formatBriefingXHTML(content),
-		ContentType: "xhtml",
-		Updated:     updated,
+	feed.Add(&atom.Entry{
+		Title:   "Weather briefing",
+		ID:      fmt.Sprintf("%s-%s", feedID, updated.Format("20060102")),
+		Content: atom.NewText(formatBriefingXHTML(content), "xhtml"),
+		Updated: atom.Time(updated),
 	})
 
 	if err := feed.Render(rw); err != nil {

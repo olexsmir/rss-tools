@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 	"olexsmir.xyz/x/is"
 )
 
@@ -35,19 +35,19 @@ func TestHandleMoviesRendersFeedFromConfiguredShows(t *testing.T) {
 		t.Fatalf("expected atom response content-type, got %q", got)
 	}
 
-	var feed app.AtomFeed
+	var feed atom.Feed
 	is.Err(t, xml.NewDecoder(rr.Body).Decode(&feed), nil)
 	is.Equal(t, feed.Title, "moviefeed")
 	is.Equal(t, feed.Subtitle, "Latest episodes from followed shows")
-	is.Equal(t, len(feed.Entries), 2)
-	is.Equal(t, strings.Contains(feed.Entries[0].Title, "S1E2"), true)
-	is.Equal(t, feed.Entries[0].Content.Type, "text")
-	is.Equal(t, len(feed.Entries[1].Links), 2)
-	is.Equal(t, feed.Entries[1].Links[1].Rel, "enclosure")
-	is.Equal(t, feed.Entries[1].Links[1].Type, "image/jpeg")
-	is.Equal(t, feed.Entries[1].Links[1].Length, "0")
-	is.Equal(t, feed.Entries[1].Links[1].Href, "https://image.tmdb.org/t/p/w500/e1.jpg")
-	is.Equal(t, feed.Entries[1].Content.Type, "xhtml")
+	is.Equal(t, len(feed.Entry), 2)
+	is.Equal(t, strings.Contains(feed.Entry[0].Title, "S1E2"), true)
+	is.Equal(t, feed.Entry[0].Content.Type, "text")
+	is.Equal(t, len(feed.Entry[1].Link), 2)
+	is.Equal(t, feed.Entry[1].Link[1].Rel, "enclosure")
+	is.Equal(t, feed.Entry[1].Link[1].Type, "image/jpeg")
+	is.Equal(t, feed.Entry[1].Link[1].Length, uint(0))
+	is.Equal(t, feed.Entry[1].Link[1].Href, "https://image.tmdb.org/t/p/w500/e1.jpg")
+	is.Equal(t, feed.Entry[1].Content.Type, "xhtml")
 }
 
 func TestHandleMoviesContinuesWhenOneShowFails(t *testing.T) {
@@ -68,9 +68,9 @@ func TestHandleMoviesContinuesWhenOneShowFails(t *testing.T) {
 
 	is.Equal(t, rr.Code, http.StatusOK)
 
-	var feed app.AtomFeed
+	var feed atom.Feed
 	is.Err(t, xml.NewDecoder(rr.Body).Decode(&feed), nil)
-	is.Equal(t, len(feed.Entries), 2)
+	is.Equal(t, len(feed.Entry), 2)
 }
 
 func TestFetchEpisodesForShowFiltersRecentAndMapsFields(t *testing.T) {

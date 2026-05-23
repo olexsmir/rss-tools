@@ -19,12 +19,15 @@ func TestFeedEntryFromMessageWithImage(t *testing.T) {
 
 	entry := feedEntryFromMessage(msg)
 	is.Equal(t, "🖼️ [2026-04-22]", entry.Title)
-	is.Equal(t, "html", entry.ContentType)
-	if !strings.Contains(entry.Content, "<p>hello &lt;world&gt;</p>") {
-		t.Fatalf("expected escaped text in image entry: %s", entry.Content)
+	if entry.Content == nil {
+		t.Fatalf("expected content in image entry")
 	}
-	if !strings.Contains(entry.Content, `src="data:image/png;base64,YWJj"`) {
-		t.Fatalf("expected image data URI in image entry: %s", entry.Content)
+	is.Equal(t, "html", entry.Content.Type)
+	if !strings.Contains(entry.Content.Body, "<p>hello &lt;world&gt;</p>") {
+		t.Fatalf("expected escaped text in image entry: %s", entry.Content.Body)
+	}
+	if !strings.Contains(entry.Content.Body, `src="data:image/png;base64,YWJj"`) {
+		t.Fatalf("expected image data URI in image entry: %s", entry.Content.Body)
 	}
 }
 
@@ -40,11 +43,14 @@ func TestFeedEntryFromMessageWithMultipleImages(t *testing.T) {
 	}
 
 	entry := feedEntryFromMessage(msg)
-	if !strings.Contains(entry.Content, `src="data:image/png;base64,YWJj"`) {
-		t.Fatalf("expected first image data URI in image entry: %s", entry.Content)
+	if entry.Content == nil {
+		t.Fatalf("expected content in image entry")
 	}
-	if !strings.Contains(entry.Content, `src="data:image/jpeg;base64,ZGVm"`) {
-		t.Fatalf("expected second image data URI in image entry: %s", entry.Content)
+	if !strings.Contains(entry.Content.Body, `src="data:image/png;base64,YWJj"`) {
+		t.Fatalf("expected first image data URI in image entry: %s", entry.Content.Body)
+	}
+	if !strings.Contains(entry.Content.Body, `src="data:image/jpeg;base64,ZGVm"`) {
+		t.Fatalf("expected second image data URI in image entry: %s", entry.Content.Body)
 	}
 }
 
@@ -57,8 +63,11 @@ func TestFeedEntryFromMessageTextOnly(t *testing.T) {
 
 	entry := feedEntryFromMessage(msg)
 	is.Equal(t, "plain text", entry.Title)
-	is.Equal(t, "", entry.ContentType)
-	is.Equal(t, "plain text", entry.Content)
+	if entry.Content == nil {
+		t.Fatalf("expected content in text entry")
+	}
+	is.Equal(t, "text", entry.Content.Type)
+	is.Equal(t, "plain text", entry.Content.Body)
 }
 
 func TestFeedEntryFromMessagePreservesNewlines(t *testing.T) {
@@ -69,9 +78,12 @@ func TestFeedEntryFromMessagePreservesNewlines(t *testing.T) {
 	}
 
 	entry := feedEntryFromMessage(msg)
-	is.Equal(t, "html", entry.ContentType)
-	if !strings.Contains(entry.Content, "line 1<br/>line 2") {
-		t.Fatalf("expected line breaks preserved in content: %s", entry.Content)
+	if entry.Content == nil {
+		t.Fatalf("expected content in text entry")
+	}
+	is.Equal(t, "html", entry.Content.Type)
+	if !strings.Contains(entry.Content.Body, "line 1<br/>line 2") {
+		t.Fatalf("expected line breaks preserved in content: %s", entry.Content.Body)
 	}
 }
 
@@ -83,17 +95,20 @@ func TestFeedEntryFromMessageLinkifiesAndAddsAtomLinks(t *testing.T) {
 	}
 
 	entry := feedEntryFromMessage(msg)
-	is.Equal(t, "html", entry.ContentType)
-	if !strings.Contains(entry.Content, `<a href="https://example.com">https://example.com</a>`) {
-		t.Fatalf("expected generic link in content: %s", entry.Content)
+	if entry.Content == nil {
+		t.Fatalf("expected content in link entry")
 	}
-	if !strings.Contains(entry.Content, `<a href="https://youtu.be/dQw4w9WgXcQ">https://youtu.be/dQw4w9WgXcQ</a>`) {
-		t.Fatalf("expected youtube link in content: %s", entry.Content)
+	is.Equal(t, "html", entry.Content.Type)
+	if !strings.Contains(entry.Content.Body, `<a href="https://example.com">https://example.com</a>`) {
+		t.Fatalf("expected generic link in content: %s", entry.Content.Body)
+	}
+	if !strings.Contains(entry.Content.Body, `<a href="https://youtu.be/dQw4w9WgXcQ">https://youtu.be/dQw4w9WgXcQ</a>`) {
+		t.Fatalf("expected youtube link in content: %s", entry.Content.Body)
 	}
 
-	is.Equal(t, 2, len(entry.Links))
-	is.Equal(t, "https://example.com", entry.Links[0].Href)
-	is.Equal(t, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", entry.Links[1].Href)
+	is.Equal(t, 2, len(entry.Link))
+	is.Equal(t, "https://example.com", entry.Link[0].Href)
+	is.Equal(t, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", entry.Link[1].Href)
 	is.Equal(t, "yt:video:dQw4w9WgXcQ", entry.ID)
 }
 

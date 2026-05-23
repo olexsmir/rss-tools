@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 	"olexsmir.xyz/x/is"
 )
 
@@ -70,9 +70,9 @@ func TestHandlerRendersAtomFeedWithOutages(t *testing.T) {
 		t.Fatalf("expected atom response content-type, got %q", got)
 	}
 
-	var feed app.AtomFeed
+	var feed atom.Feed
 	is.Err(t, xml.NewDecoder(rr.Body).Decode(&feed), nil)
-	is.NotEqual(t, 0, len(feed.Entries))
+	is.NotEqual(t, 0, len(feed.Entry))
 }
 
 func TestHandlerRendersEmptyAtomFeedForNoOutages(t *testing.T) {
@@ -100,9 +100,9 @@ func TestHandlerRendersEmptyAtomFeedForNoOutages(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var feed app.AtomFeed
+	var feed atom.Feed
 	is.Err(t, xml.NewDecoder(rr.Body).Decode(&feed), nil)
-	is.Equal(t, 0, len(feed.Entries))
+	is.Equal(t, 0, len(feed.Entry))
 }
 
 func mustReadFixture(t *testing.T, name string) []byte {

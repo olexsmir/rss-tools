@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"olexsmir.xyz/rss-tools/app"
+	"olexsmir.xyz/rss-tools/app/atom"
 )
 
 type moviefeed struct {
@@ -60,30 +61,29 @@ func (mf *moviefeed) fetchNewEpisodes() ([]TMDBEpisode, error) {
 	return allEpisodes, nil
 }
 
-func generateFeed(episodes []TMDBEpisode) *app.FeedBuilder {
-	feed := app.NewFeed("moviefeed", "moviefeed").
-		WithSubtitle("Latest episodes from followed shows")
+func generateFeed(episodes []TMDBEpisode) *atom.Feed {
+	feed := atom.NewFeed("moviefeed", "moviefeed")
 
 	for i := len(episodes) - 1; i >= 0; i-- {
 		ep := episodes[i]
 		airDate, _ := time.Parse(dateFormat, ep.AirDate)
 		content, contentType := episodeContent(ep)
-		links := []app.FeedLink{
+		links := []atom.Link{
 			{
 				Rel:  "alternate",
 				Href: fmt.Sprintf("https://www.themoviedb.org/tv/episode/%d", ep.ID),
 			},
 		}
 		if ep.StillPath != "" {
-			links = append(links, app.FeedLink{
+			links = append(links, atom.Link{
 				Rel:    "enclosure",
 				Type:   "image/jpeg",
-				Length: "0",
+				Length: 0,
 				Href:   tmdbImageBaseURL + ep.StillPath,
 			})
 		}
 
-		feed.Add(app.FeedEntry{
+		feed.Add(&atom.Entry{
 			ID: fmt.Sprintf("%s-%d-%d", ep.ShowID, ep.SeasonNumber, ep.EpisodeNumber),
 			Title: fmt.Sprintf(
 				"%s S%dE%d: %s",
@@ -92,10 +92,9 @@ func generateFeed(episodes []TMDBEpisode) *app.FeedBuilder {
 				ep.EpisodeNumber,
 				ep.Name,
 			),
-			Content:     content,
-			ContentType: contentType,
-			Updated:     airDate,
-			Links:       links,
+			Content: atom.NewText(content, contentType),
+			Updated: atom.Time(airDate),
+			Link:    links,
 		})
 	}
 	return feed
