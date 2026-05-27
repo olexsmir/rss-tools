@@ -44,6 +44,10 @@ type tmdbFindResponse struct {
 	TvResults []tmdbShow `json:"tv_results"`
 }
 
+type tmdbSearchResponse struct {
+	Results []tmdbShow `json:"results"`
+}
+
 type tmdbSeasonResponse struct {
 	Episodes []TMDBEpisode `json:"episodes"`
 }
@@ -105,6 +109,18 @@ func (a *TMDBAPI) getTMDBID(showID string) (string, error) {
 		return fmt.Sprintf("%d", result.TvResults[0].ID), nil
 	}
 	return showID, nil
+}
+
+func (a *TMDBAPI) SearchShow(query string) (*tmdbShow, error) {
+	encoded := url.QueryEscape(query)
+	result, err := makeRequest[tmdbSearchResponse](a, "/search/tv?query=%s", encoded)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Results) == 0 {
+		return nil, fmt.Errorf("no TMDB show found for %q", query)
+	}
+	return &result.Results[0], nil
 }
 
 func makeRequest[T any](a *TMDBAPI, endpoint string, args ...any) (*T, error) {
