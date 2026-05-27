@@ -119,6 +119,12 @@ func (t *telegram) worker(ctx context.Context) error {
 				continue
 			}
 
+			key := binary.BigEndian.AppendUint64(nil, uint64(u.Message.MessageID))
+			if existing, _ := t.messages.Get(key); existing != nil {
+				offset = u.UpdateID + 1
+				continue
+			}
+
 			_ = t.enrichMessageWithLinkTitles(ctx, u.Message)
 
 			if err := t.saveMessage(u.Message); err != nil {
