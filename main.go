@@ -11,6 +11,7 @@ import (
 	"olexsmir.xyz/rss-tools/sources/moviefeed"
 	"olexsmir.xyz/rss-tools/sources/musicfeed"
 	"olexsmir.xyz/rss-tools/sources/telegram"
+	"olexsmir.xyz/rss-tools/sources/twitch"
 	"olexsmir.xyz/rss-tools/sources/weather"
 	"olexsmir.xyz/rss-tools/sources/ztoe"
 )
@@ -45,6 +46,7 @@ func run(ctx context.Context, cfgPath, dbPath string) error {
 	_ = moviefeed.Register(app)
 	_ = musicfeed.Register(app)
 	_ = weather.Register(app)
+	_ = twitch.Register(app)
 
 	return app.Start(ctx)
 }
