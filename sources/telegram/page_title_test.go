@@ -118,3 +118,31 @@ func TestFetchPageTitleRejectsYouTubePlaceholderWithoutMetadata(t *testing.T) {
 		t.Fatalf("expected an error for placeholder title")
 	}
 }
+
+func TestFetchPageTitleFallsBackToYouTubeOEmbed(t *testing.T) {
+	calls := 0
+	title, err := fetchPageTitle(context.Background(), func(_ context.Context, url string) (*http.Response, error) {
+		calls++
+		if strings.Contains(url, "oembed") {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"application/json; charset=utf-8"},
+				},
+				Body: io.NopCloser(strings.NewReader(`{"title":"Rick Astley - Never Gonna Give You Up"}`)),
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"text/html; charset=utf-8"},
+			},
+			Body: io.NopCloser(strings.NewReader(`<html><head><title> - YouTube </title></head></html>`)),
+		}, nil
+	}, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	is.Equal(t, "Rick Astley - Never Gonna Give You Up", title)
+	is.Equal(t, 2, calls)
+}

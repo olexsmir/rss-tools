@@ -2,9 +2,11 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -43,6 +45,12 @@ func fetchPageTitle(ctx context.Context, get func(context.Context, string) (*htt
 		title = metaPageTitle(doc)
 	}
 	if !isMeaningfulPageTitle(title) {
+		if videoID, _, ok := youtubeCanonicalLink(rawURL); ok {
+			ytTitle, ytErr := fetchYouTubeVideoTitle(ctx, get, videoID)
+			if ytErr == nil {
+				return ytTitle, nil
+			}
+		}
 		return "", fmt.Errorf("page title is empty")
 	}
 	return title, nil
@@ -68,6 +76,44 @@ func metaPageTitle(doc *goquery.Document) string {
 		}
 	}
 	return ""
+}
+
+type youtubeOEmbedResponse struct {
+	Title string `json:"title"`
+}
+
+func fetchYouTubeVideoTitle(ctx context.Context, get func(context.Context, string) (*http.Response, error), videoID string) (string, error) {
+	u := url.URL{
+		Scheme: "https",
+		Host:   "www.youtube.com",
+		Path:   "/oembed",
+	}
+	q := u.Query()
+	q.Set("url", "https://www.youtube.com/watch?v="+videoID)
+	q.Set("format", "json")
+	u.RawQuery = q.Encode()
+
+	resp, err := get(ctx, u.String())
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("oEmbed request failed with status %d", resp.StatusCode)
+	}
+
+	var oembed youtubeOEmbedResponse
+	if err := json.NewDecoder(resp.Body).Decode(&oembed); err != nil {
+		return "", err
+	}
+
+	title := normalizePageTitle(oembed.Title)
+	if !isMeaningfulPageTitle(title) {
+		return "", fmt.Errorf("oEmbed returned empty title")
+	}
+
+	return title, nil
 }
 
 func normalizePageTitle(raw string) string {
