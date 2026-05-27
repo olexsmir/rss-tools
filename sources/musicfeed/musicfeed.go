@@ -80,7 +80,7 @@ func Register(a *app.App) error {
 }
 
 func (mf *musicfeed) handleMusic(w http.ResponseWriter, r *http.Request) {
-	if !mf.refreshed.Load() {
+	if !mf.refreshed.Load() && (time.Now().Weekday() == time.Friday || mf.cacheMissing()) {
 		mf.refreshMu.Lock()
 		if !mf.refreshed.Load() {
 			mf.refresh(r.Context())
@@ -106,36 +106,61 @@ func (mf *musicfeed) handleMusic(w http.ResponseWriter, r *http.Request) {
 func (mf *musicfeed) worker(ctx context.Context) error {
 	mf.logger.Info("starting musicfeed worker")
 
-	mf.maybeRefresh(ctx)
-
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
+	// Only refresh on Fridays — releases drop on Friday, so we fetch once weekly
+	// to avoid rate-limiting MusicBrainz.
+	if time.Now().Weekday() == time.Friday {
+		mf.maybeRefresh(ctx)
+	}
 
 	for {
+		next := nextFridayRefresh(time.Now())
+		dur := time.Until(next)
+		mf.logger.Info("next music feed refresh", "at", next.Format("2006-01-02 15:04"), "in", dur.Round(time.Second))
+
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-time.After(dur):
 			mf.maybeRefresh(ctx)
 		}
 	}
 }
 
-func (mf *musicfeed) maybeRefresh(ctx context.Context) {
-	now := time.Now()
+func nextFridayRefresh(after time.Time) time.Time {
+	const targetHour = 19
+	y, m, d := after.Date()
+	loc := after.Location()
 
+	// If today is Friday before target hour, return today at target hour.
+	if after.Weekday() == time.Friday {
+		target := time.Date(y, m, d, targetHour, 0, 0, 0, loc)
+		if after.Before(target) {
+			return target
+		}
+	}
+
+	// Otherwise advance to next Friday at target hour.
+	next := time.Date(y, m, d, 0, 0, 0, 0, loc).Add(24 * time.Hour)
+	for next.Weekday() != time.Friday {
+		next = next.Add(24 * time.Hour)
+	}
+	return time.Date(next.Year(), next.Month(), next.Day(), targetHour, 0, 0, 0, loc)
+}
+
+func (mf *musicfeed) cacheMissing() bool {
+	_, err := mf.bucket.Get([]byte("feed"))
+	return err != nil
+}
+
+func (mf *musicfeed) maybeRefresh(ctx context.Context) {
 	mf.refreshMu.Lock()
 	defer mf.refreshMu.Unlock()
-
-	if mf.refreshed.Load() && now.Weekday() != time.Friday {
-		return
-	}
 
 	if mf.refreshed.Load() {
 		raw, err := mf.bucket.Get([]byte("refreshed_at"))
 		if err == nil && raw != nil {
 			lastRefresh := time.Unix(int64(binary.BigEndian.Uint64(raw)), 0)
-			if isSameDay(lastRefresh, now) {
+			if isSameDay(lastRefresh, time.Now()) {
 				return
 			}
 		}
