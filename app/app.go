@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -34,7 +35,7 @@ func New(cfg *Config, db *bbolt.DB) *App {
 		db:            db,
 		scraperClient: &http.Client{Timeout: 10 * time.Second},
 
-		Logger: slog.Default(),
+		Logger: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug, AddSource: false})),
 		Client: &http.Client{Timeout: 31 * time.Second},
 		Config: cfg,
 	}

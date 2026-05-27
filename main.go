@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"flag"
+	"log/slog"
+	"os"
 
 	"go.etcd.io/bbolt"
 	"olexsmir.xyz/rss-tools/app"
@@ -20,7 +22,8 @@ func main() {
 	flag.Parse()
 
 	if err := run(context.Background(), cfgPath, dbPath); err != nil {
-		panic(err)
+		slog.Error("fatal", "err", err)
+		os.Exit(1)
 	}
 }
 
