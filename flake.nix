@@ -14,7 +14,7 @@
             pname = "rss-tools";
             version = version;
             src = ./.;
-            vendorHash = "sha256-HxCJvHCIve83OMvInOZtgcveC9uVZ5YAZAi5cL26akI=";
+            vendorHash = null;
             ldflags = [ "-s" "-w" ];
             meta = with pkgs.lib; { license = licenses.mit; };
           };
