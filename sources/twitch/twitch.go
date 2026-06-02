@@ -92,7 +92,8 @@ func (tf *twitchfeed) handleStreams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feed := atom.NewFeed("Twitch: "+name, "twitch:"+name)
+	feed := atom.NewFeed("Twitch: "+name, "twitch:"+name).
+		WithLink("alternate", "https://twitch.tv/"+name)
 	if stream != nil {
 		feed.Add(entryFromStream(stream))
 	}

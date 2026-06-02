@@ -34,6 +34,13 @@ func (f *Feed) WithUpdated(updated time.Time) *Feed {
 	return f
 }
 
+func (f *Feed) WithLink(rel, href string) *Feed {
+	if href != "" {
+		f.Link = append(f.Link, Link{Rel: rel, Href: href})
+	}
+	return f
+}
+
 func (f *Feed) Add(entry *Entry) *Feed {
 	if entry != nil {
 		f.Entry = append(f.Entry, entry)
