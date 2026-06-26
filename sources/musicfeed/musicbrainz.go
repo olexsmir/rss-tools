@@ -32,6 +32,16 @@ type mbRelease struct {
 	CoverArtArchive struct {
 		Artwork bool `json:"artwork"`
 	} `json:"cover-art-archive"`
+	Relations []mbRelation `json:"relations,omitempty"`
+}
+
+type mbRelation struct {
+	Type      string `json:"type"`
+	Direction string `json:"direction"`
+	URL       struct {
+		ID       string `json:"id"`
+		Resource string `json:"resource"`
+	} `json:"url"`
 }
 
 type mbReleaseResponse struct {
@@ -150,7 +160,7 @@ func (a *musicbrainzAPI) fetchArtist(ctx context.Context, mbid string) (string, 
 
 func (a *musicbrainzAPI) fetchReleases(ctx context.Context, mbid string) ([]mbRelease, error) {
 	u := fmt.Sprintf(
-		"%s/release?artist=%s&inc=artist-credits+release-groups&limit=100&fmt=json",
+		"%s/release?artist=%s&inc=artist-credits+release-groups+url-rels&limit=100&fmt=json",
 		mbBaseURL, mbid,
 	)
 	resp, err := a.doRequest(ctx, u)

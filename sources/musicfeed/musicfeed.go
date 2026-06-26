@@ -31,6 +31,8 @@ type release struct {
 	artistName     string
 	label          string
 	hasArtwork     bool
+	spotifyURL     string
+	youtubeURL     string
 }
 
 type releaseFetcher interface {
@@ -188,7 +190,6 @@ func (mf *musicfeed) refresh(ctx context.Context) {
 	sem := make(chan struct{}, 5)
 
 	for _, raw := range mf.artists {
-		raw := raw
 		wg.Add(1)
 		sem <- struct{}{}
 
@@ -225,6 +226,7 @@ func (mf *musicfeed) refresh(ctx context.Context) {
 				if len(r.ArtistCredit) > 0 {
 					artistName = r.ArtistCredit[0].Name
 				}
+				spotifyURL, youtubeURL := extractExtURLs(r.Relations)
 				artistReleases = append(artistReleases, release{
 					id:             r.ID,
 					releaseGroupID: r.ReleaseGroup.ID,
@@ -234,6 +236,8 @@ func (mf *musicfeed) refresh(ctx context.Context) {
 					artistName:     artistName,
 					label:          label,
 					hasArtwork:     r.CoverArtArchive.Artwork,
+					spotifyURL:     spotifyURL,
+					youtubeURL:     youtubeURL,
 				})
 			}
 
@@ -282,13 +286,13 @@ func (mf *musicfeed) resolveArtist(ctx context.Context, entry artistEntry) (stri
 	}
 
 	if isMBID(entry.label) {
-		name, err := mf.api.fetchArtist(ctx, entry.label)
-		if err != nil {
-			mf.logger.Warn("failed to fetch artist name", "mbid", entry.label, "err", err)
+		name, ferr := mf.api.fetchArtist(ctx, entry.label)
+		if ferr != nil {
+			mf.logger.Warn("failed to fetch artist name", "mbid", entry.label, "err", ferr)
 			return entry.label, entry.label
 		}
-		if err := mf.bucket.Set([]byte("mapping:"+name), []byte(entry.label)); err != nil {
-			mf.logger.Warn("failed to cache artist mapping", "err", err)
+		if berr := mf.bucket.Set([]byte("mapping:"+name), []byte(entry.label)); berr != nil {
+			mf.logger.Warn("failed to cache artist mapping", "err", berr)
 		}
 		return entry.label, name
 	}
@@ -363,6 +367,22 @@ func parseMBDate(s string) time.Time {
 	return time.Time{}
 }
 
+func extractExtURLs(rels []mbRelation) (spotifyURL, youtubeURL string) {
+	for _, rel := range rels {
+		if rel.Direction != "forward" {
+			continue
+		}
+		resource := rel.URL.Resource
+		switch {
+		case strings.Contains(resource, "open.spotify.com"):
+			spotifyURL = resource
+		case strings.Contains(resource, "youtube.com") || strings.Contains(resource, "youtu.be"):
+			youtubeURL = resource
+		}
+	}
+	return
+}
+
 func generateFeed(releases []release) *atom.Feed {
 	feed := atom.NewFeed("New Music Releases", "musicfeed")
 	for _, r := range releases {
@@ -371,12 +391,10 @@ func generateFeed(releases []release) *atom.Feed {
 			displayName = r.artistName
 		}
 
-		links := []atom.Link{
-			{
-				Rel:  "alternate",
-				Href: fmt.Sprintf("https://musicbrainz.org/release/%s", r.id),
-			},
-		}
+		links := []atom.Link{{
+			Rel:  "alternate",
+			Href: fmt.Sprintf("https://musicbrainz.org/release/%s", r.id),
+		}}
 
 		content, contentType := releaseContent(r, displayName)
 
@@ -385,6 +403,21 @@ func generateFeed(releases []release) *atom.Feed {
 				Rel:  "enclosure",
 				Type: "image/jpeg",
 				Href: fmt.Sprintf("%s/release/%s/front-250.jpg", caaBaseURL, r.id),
+			})
+		}
+
+		if r.spotifyURL != "" {
+			links = append(links, atom.Link{
+				Rel:   "related",
+				Href:  r.spotifyURL,
+				Title: "Spotify",
+			})
+		}
+		if r.youtubeURL != "" {
+			links = append(links, atom.Link{
+				Rel:   "related",
+				Href:  r.youtubeURL,
+				Title: "YouTube",
 			})
 		}
 
@@ -415,7 +448,7 @@ func releaseContent(r release, displayName string) (string, string) {
 	}
 
 	imageURL := fmt.Sprintf("%s/release/%s/front-250.jpg", caaBaseURL, r.id)
-	parts := make([]string, 0, 4)
+	parts := make([]string, 0, 6)
 	parts = append(parts, "<body>")
 
 	releaseType := strings.TrimSpace(r.releaseType)
@@ -428,6 +461,14 @@ func releaseContent(r release, displayName string) (string, string) {
 	parts = append(parts, "<p>"+html.EscapeString(text)+"</p>")
 	parts = append(parts,
 		fmt.Sprintf(`<p><img src="%s" alt="%s"/></p>`, html.EscapeString(imageURL), html.EscapeString(r.title)))
+
+	if r.spotifyURL != "" {
+		parts = append(parts, fmt.Sprintf(`<p><a href="%s">Spotify</a></p>`, html.EscapeString(r.spotifyURL)))
+	}
+	if r.youtubeURL != "" {
+		parts = append(parts, fmt.Sprintf(`<p><a href="%s">YouTube</a></p>`, html.EscapeString(r.youtubeURL)))
+	}
+
 	parts = append(parts, "</body>")
 
 	return strings.Join(parts, ""), "xhtml"
